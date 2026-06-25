@@ -1,0 +1,13 @@
+{
+  "itemGroup.chemecraft": "Example Mod Tab",
+  "block.chemecraft.example_block": "Example Block",
+  "item.chemecraft.example_item": "Example Item",
+
+  "chemecraft.configuration.title": "ChemECraft Configs",
+  "chemecraft.configuration.section.chemecraft.common.toml": "ChemECraft Configs",
+  "chemecraft.configuration.section.chemecraft.common.toml.title": "ChemECraft Configs",
+  "chemecraft.configuration.items": "Item List",
+  "chemecraft.configuration.logDirtBlock": "Log Dirt Block",
+  "chemecraft.configuration.magicNumberIntroduction": "Magic Number Text",
+  "chemecraft.configuration.magicNumber": "Magic Number"
+}
