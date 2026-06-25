@@ -1,5 +1,8 @@
 package com.wonderlando.chemecraft;
 
+import com.wonderlando.chemecraft.client.BatchReactorScreen;
+import com.wonderlando.chemecraft.registry.ModMenus;
+
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -7,6 +10,7 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 
@@ -27,5 +31,10 @@ public class ChemECraftClient {
         // Some client setup code
         ChemECraft.LOGGER.info("HELLO FROM CLIENT SETUP");
         ChemECraft.LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
+    }
+
+    @SubscribeEvent
+    static void registerScreens(RegisterMenuScreensEvent event) {
+        event.register(ModMenus.BATCH_REACTOR.get(), BatchReactorScreen::new);
     }
 }

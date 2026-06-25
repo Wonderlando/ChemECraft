@@ -4,9 +4,12 @@ import org.slf4j.Logger;
 
 import com.mojang.logging.LogUtils;
 import com.wonderlando.chemecraft.datagen.ChemECraftDatagen;
+import com.wonderlando.chemecraft.registry.ModBlockEntities;
 import com.wonderlando.chemecraft.registry.ModBlocks;
 import com.wonderlando.chemecraft.registry.ModCreativeTabs;
+import com.wonderlando.chemecraft.registry.ModFluids;
 import com.wonderlando.chemecraft.registry.ModItems;
+import com.wonderlando.chemecraft.registry.ModMenus;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.Blocks;
@@ -36,7 +39,13 @@ public class ChemECraft {
         // Register the mod's deferred registers to the mod event bus.
         ModBlocks.register(modEventBus);
         ModItems.register(modEventBus);
+        ModFluids.register(modEventBus);
+        ModBlockEntities.register(modEventBus);
+        ModMenus.register(modEventBus);
         ModCreativeTabs.register(modEventBus);
+
+        // Register block-entity capabilities (the batch reactor's fluid tank).
+        modEventBus.addListener(ModBlockEntities::registerCapabilities);
 
         // Data generation — only runs under the data run configuration.
         modEventBus.addListener(ChemECraftDatagen::gatherData);

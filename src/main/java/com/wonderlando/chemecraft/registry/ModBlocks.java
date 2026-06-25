@@ -1,0 +1,26 @@
+package com.wonderlando.chemecraft.registry;
+
+import com.wonderlando.chemecraft.ChemECraft;
+import com.wonderlando.chemecraft.block.BatchReactorBlock;
+
+import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.material.MapColor;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.registries.DeferredBlock;
+import net.neoforged.neoforge.registries.DeferredRegister;
+
+/** All blocks registered by ChemECraft. */
+public final class ModBlocks {
+    public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(ChemECraft.MODID);
+
+    // The batch reactor: a sturdy metal vessel backed by a BlockEntity with a fluid tank.
+    public static final DeferredBlock<BatchReactorBlock> BATCH_REACTOR = BLOCKS.registerBlock("batch_reactor",
+            BatchReactorBlock::new,
+            p -> p.mapColor(MapColor.METAL).strength(3.5f).sound(SoundType.METAL));
+
+    private ModBlocks() {}
+
+    public static void register(IEventBus modEventBus) {
+        BLOCKS.register(modEventBus);
+    }
+}

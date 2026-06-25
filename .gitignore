@@ -1,0 +1,25 @@
+# Eclipse
+*.launch
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# Gradle
+build/
+.gradle/
+
+# NeoForge / run directories
+run/
+runs/
+run-data/
+src/generated/resources/.cache/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log

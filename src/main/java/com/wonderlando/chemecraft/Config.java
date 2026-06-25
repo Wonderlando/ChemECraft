@@ -34,6 +34,12 @@ public class Config {
             .comment("A list of items to log on common setup.")
             .defineListAllowEmpty("items", List.of("minecraft:iron_ingot"), () -> "", Config::validateItemName);
 
+    // ChemECraft — batch reactor
+    public static final ModConfigSpec.DoubleValue REACTION_MODEL_DAYS_PER_TICK = BUILDER
+            .comment("Model-days of fermentation simulated per game tick.",
+                    "Default ~0.00125 makes a typical batch finish in roughly one in-game day (24000 ticks).")
+            .defineInRange("reactionModelDaysPerTick", 0.00125, 0.0, 1.0);
+
     static final ModConfigSpec SPEC = BUILDER.build();
 
     private static boolean validateItemName(final Object obj) {
