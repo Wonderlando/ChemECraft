@@ -1,7 +1,6 @@
 {
-  "itemGroup.chemecraft": "Example Mod Tab",
-  "block.chemecraft.example_block": "Example Block",
-  "item.chemecraft.example_item": "Example Item",
+  "itemGroup.chemecraft": "ChemECraft",
+  "block.chemecraft.batch_reactor": "Batch Reactor",
 
   "chemecraft.configuration.title": "ChemECraft Configs",
   "chemecraft.configuration.section.chemecraft.common.toml": "ChemECraft Configs",

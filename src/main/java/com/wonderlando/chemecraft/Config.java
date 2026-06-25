@@ -1,4 +1,4 @@
-package com.example.examplemod;
+package com.wonderlando.chemecraft;
 
 import java.util.List;
 import java.util.Set;
