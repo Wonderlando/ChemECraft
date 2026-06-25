@@ -18,6 +18,9 @@ import net.minecraft.world.level.Level;
  * encoded display values that the menu auto-syncs to the client each tick. The screen decodes them.
  */
 public class BatchReactorMenu extends AbstractContainerMenu {
+    /** clickMenuButton id for the "empty the reactor" action (kept out of the reaction-index range). */
+    public static final int BUTTON_EMPTY = 100;
+
     private final ContainerData data;
     private final Level level;
     private final BlockPos pos;
@@ -58,5 +61,19 @@ public class BatchReactorMenu extends AbstractContainerMenu {
     public boolean stillValid(Player player) {
         return level.getBlockEntity(pos) instanceof BatchReactorBlockEntity
                 && player.distanceToSqr(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5) <= 64.0;
+    }
+
+    /** A GUI button was clicked: select the reaction with that index on the reactor (server-side). */
+    @Override
+    public boolean clickMenuButton(Player player, int id) {
+        if (level.getBlockEntity(pos) instanceof BatchReactorBlockEntity reactor) {
+            if (id == BUTTON_EMPTY) {
+                reactor.empty();
+            } else {
+                reactor.selectReaction(id);
+            }
+            return true;
+        }
+        return false;
     }
 }

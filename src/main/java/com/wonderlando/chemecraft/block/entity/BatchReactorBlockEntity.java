@@ -2,11 +2,15 @@ package com.wonderlando.chemecraft.block.entity;
 
 import com.wonderlando.chemecraft.Config;
 import com.wonderlando.chemecraft.menu.BatchReactorMenu;
-import com.wonderlando.chemecraft.reaction.reactions.Fermentation;
+import com.wonderlando.chemecraft.reaction.Reaction;
 import com.wonderlando.chemecraft.reaction.ReactionNetwork;
+import com.wonderlando.chemecraft.reaction.Reactions;
 import com.wonderlando.chemecraft.reaction.Species;
 import com.wonderlando.chemecraft.registry.ModBlockEntities;
 import com.wonderlando.chemecraft.registry.ModFluids;
+
+import java.util.Arrays;
+import java.util.List;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -46,18 +50,19 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
     /** Fermentable substrate added per wheat item, in grams. */
     public static final double SUBSTRATE_PER_WHEAT_G = 50.0;
     /** Number of synced display values exposed to the GUI. */
-    public static final int DISPLAY_SLOTS = 5;
+    public static final int DISPLAY_SLOTS = 7;
 
     private static final double SEED_BIOMASS_G_PER_L = 0.5; // auto-seeded yeast inoculum
     private static final int MAX_CATCHUP_SUBSTEPS = 2000;
     private static final double MAX_SUBSTEP_DAYS = 0.05;
 
-    /** The reaction network this reactor runs — add more reactions here to extend its chemistry. */
-    public static final ReactionNetwork NETWORK = new ReactionNetwork(new Fermentation());
-
     // Reaction state: molar amounts (mol) per species, indexed by Species.ordinal().
     private final double[] amounts = new double[Species.values().length];
     private long lastGameTime = Long.MIN_VALUE;
+
+    // The reaction the user selected for this reactor (ASPEN-style); NONE = idle until one is picked.
+    private int selectedReaction = Reactions.NONE;
+    private ReactionNetwork activeNetwork = new ReactionNetwork(List.of());
 
     private final FluidStacksResourceHandler tank = new FluidStacksResourceHandler(FLUID_SLOTS, CAPACITY_MB) {
         @Override
@@ -77,7 +82,7 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
             if (resource.isEmpty() || resource.getFluid() == Fluids.WATER) {
                 return true;
             }
-            for (Species product : NETWORK.liquidProducts()) {
+            for (Species product : Reactions.LIQUID_SPECIES) {
                 if (resource.getFluid() == fluidFor(product)) {
                     return true;
                 }
@@ -89,6 +94,9 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
         protected void onContentsChanged(int index, FluidStack oldStack) {
             setChanged();
             if (level != null && !level.isClientSide()) {
+                if (totalFluidMb() == 0) {
+                    Arrays.fill(amounts, 0.0); // vessel fully drained: clear the dissolved species too
+                }
                 level.sendBlockUpdated(getBlockPos(), getBlockState(), getBlockState(), Block.UPDATE_ALL);
             }
         }
@@ -136,6 +144,8 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
             case 2 -> (int) Math.round(amounts[Species.SUBSTRATE.ordinal()] * 1000.0);
             case 3 -> (int) Math.round(amounts[Species.BIOMASS.ordinal()] * 1000.0);
             case 4 -> (int) Math.round(amounts[Species.CARBON_DIOXIDE.ordinal()] * 1000.0);
+            case 5 -> (int) Math.round(amounts[Species.ACETIC_ACID.ordinal()] * 1000.0);
+            case 6 -> selectedReaction;
             default -> 0;
         };
     }
@@ -148,6 +158,55 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
     @Override
     public AbstractContainerMenu createMenu(int containerId, Inventory playerInventory, Player player) {
         return new BatchReactorMenu(containerId, playerInventory, this);
+    }
+
+    /** Select which reaction this reactor runs (index into {@link Reactions#AVAILABLE}; -1 = none/idle). */
+    public void selectReaction(int index) {
+        if (!isEmpty()) {
+            return; // ASPEN-style: the reaction can only be changed while the reactor is empty
+        }
+        Reaction reaction = Reactions.byIndex(index);
+        this.selectedReaction = (reaction == null) ? Reactions.NONE : index;
+        this.activeNetwork = (reaction == null) ? new ReactionNetwork(List.of()) : new ReactionNetwork(reaction);
+        setChanged();
+        if (level != null && !level.isClientSide()) {
+            level.sendBlockUpdated(getBlockPos(), getBlockState(), getBlockState(), Block.UPDATE_ALL);
+        }
+    }
+
+    public int getSelectedReaction() {
+        return selectedReaction;
+    }
+
+    /** Empty the reactor: discard all fluids and dissolved species, returning it to a clean state. */
+    public void empty() {
+        for (int i = 0; i < tank.size(); i++) {
+            tank.set(i, FluidResource.EMPTY, 0);
+        }
+        Arrays.fill(amounts, 0.0);
+        lastGameTime = Long.MIN_VALUE;
+        setChanged();
+        if (level != null && !level.isClientSide()) {
+            level.sendBlockUpdated(getBlockPos(), getBlockState(), getBlockState(), Block.UPDATE_ALL);
+        }
+    }
+
+    /** Remove {@code moles} of a product to cash out; returns true if there was enough available. */
+    public boolean extract(Species product, double moles) {
+        if (amounts[product.ordinal()] < moles) {
+            return false;
+        }
+        amounts[product.ordinal()] -= moles;
+        Fluid fluid = fluidFor(product);
+        if (fluid != null) {
+            double grams = amounts[product.ordinal()] * product.molarMass();
+            setFluidAmount(fluid, (int) Math.round(grams / product.density()));
+        }
+        setChanged();
+        if (level != null && !level.isClientSide()) {
+            level.sendBlockUpdated(getBlockPos(), getBlockState(), getBlockState(), Block.UPDATE_ALL);
+        }
+        return true;
     }
 
     /** Charge fermentable substrate into the vessel (given in grams, e.g. from a wheat item). */
@@ -172,6 +231,19 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
         return getFluidMb(Fluids.WATER);
     }
 
+    /** True when the vessel holds no fluids and no dissolved species — the reaction may be changed. */
+    public boolean isEmpty() {
+        if (totalFluidMb() > 0) {
+            return false;
+        }
+        for (double amount : amounts) {
+            if (amount > 1.0e-9) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public static void serverTick(Level level, BlockPos pos, BlockState state, BatchReactorBlockEntity be) {
         be.tickReaction(level);
     }
@@ -185,14 +257,28 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
             return;
         }
 
+        Reaction reaction = Reactions.byIndex(selectedReaction);
+        if (reaction == null) {
+            return; // ASPEN-style: nothing happens until the user selects a reaction
+        }
         double volumeL = getWaterMb() / 1000.0;
-        if (volumeL <= 0.0 || amounts[Species.SUBSTRATE.ordinal()] <= 0.0) {
-            return; // idle: need water + substrate to ferment
+        if (volumeL <= 0.0) {
+            return; // need a solvent
         }
 
-        // Auto-seed yeast once substrate is dissolved in water.
-        if (amounts[Species.BIOMASS.ordinal()] <= 0.0) {
+        // Seed the inoculum/catalyst the selected reaction needs (e.g. yeast for fermentation).
+        boolean seeded = false;
+        if (reaction.reactants().containsKey(Species.BIOMASS) && amounts[Species.BIOMASS.ordinal()] <= 0.0) {
             amounts[Species.BIOMASS.ordinal()] = SEED_BIOMASS_G_PER_L * volumeL / Species.BIOMASS.molarMass();
+            seeded = true;
+        }
+
+        // Nothing to do if the selected reaction can't currently proceed (its reactants are absent).
+        if (reaction.rate(concentrations(volumeL)) <= 0.0) {
+            if (seeded) {
+                setChanged();
+            }
+            return;
         }
 
         double totalModelDays = elapsedTicks * Config.REACTION_MODEL_DAYS_PER_TICK.get();
@@ -200,16 +286,25 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
                 Math.max(1L, (long) Math.ceil(totalModelDays / MAX_SUBSTEP_DAYS)));
         double dtDays = totalModelDays / steps;
         for (int i = 0; i < steps; i++) {
-            NETWORK.step(amounts, volumeL, dtDays);
+            activeNetwork.step(amounts, volumeL, dtDays);
         }
 
         updateLiquidProducts();
         setChanged();
     }
 
+    /** Current molar concentrations (mol/L) indexed by {@link Species#ordinal()}. */
+    private double[] concentrations(double volumeL) {
+        double[] concentration = new double[amounts.length];
+        for (int i = 0; i < amounts.length; i++) {
+            concentration[i] = amounts[i] / volumeL;
+        }
+        return concentration;
+    }
+
     /** Materialize each species the reaction network declares as a liquid product into tank fluid. */
     private void updateLiquidProducts() {
-        for (Species product : NETWORK.liquidProducts()) {
+        for (Species product : Reactions.LIQUID_SPECIES) {
             Fluid fluid = fluidFor(product);
             if (fluid == null) {
                 continue; // declared as a liquid product, but no fluid is registered for it yet
@@ -280,6 +375,7 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
             output.putDouble("mol_" + species.name(), amounts[species.ordinal()]);
         }
         output.putLong("lastGameTime", lastGameTime);
+        output.putInt("selectedReaction", selectedReaction);
     }
 
     @Override
@@ -293,6 +389,9 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
             amounts[species.ordinal()] = input.getDoubleOr("mol_" + species.name(), 0.0);
         }
         lastGameTime = input.getLongOr("lastGameTime", Long.MIN_VALUE);
+        selectedReaction = input.getIntOr("selectedReaction", Reactions.NONE);
+        Reaction loaded = Reactions.byIndex(selectedReaction);
+        activeNetwork = (loaded == null) ? new ReactionNetwork(List.of()) : new ReactionNetwork(loaded);
     }
 
     @Override

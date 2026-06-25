@@ -1,6 +1,7 @@
 package com.wonderlando.chemecraft.block;
 
 import com.wonderlando.chemecraft.block.entity.BatchReactorBlockEntity;
+import com.wonderlando.chemecraft.reaction.Species;
 import com.wonderlando.chemecraft.registry.ModBlockEntities;
 
 import net.minecraft.core.BlockPos;
@@ -9,6 +10,8 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.alchemy.PotionContents;
+import net.minecraft.world.item.alchemy.Potions;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.EntityBlock;
@@ -23,10 +26,13 @@ import net.neoforged.neoforge.transfer.transaction.Transaction;
 
 /**
  * The batch reactor block. Hosts a {@link BatchReactorBlockEntity} that holds a multi-fluid vessel
- * and runs the fermentation. Right-click with wheat to charge substrate, with a bucket to fill/drain
- * water, or empty-handed for a contents readout.
+ * and runs the selected reaction. Right-click with wheat to charge substrate, a bucket to fill/drain
+ * water, an empty bottle to cash out a finished product into a potion, or empty-handed to open the GUI.
  */
 public class BatchReactorBlock extends Block implements EntityBlock {
+    /** Moles of product consumed per bottle when cashing out. Tunable. */
+    private static final double MOLES_PER_BOTTLE = 1.0;
+
     public BatchReactorBlock(BlockBehaviour.Properties properties) {
         super(properties);
     }
@@ -69,6 +75,13 @@ public class BatchReactorBlock extends Block implements EntityBlock {
             }
             return InteractionResult.SUCCESS;
         }
+        // Cash out a finished product into a themed potion with an empty bottle.
+        if (stack.is(Items.GLASS_BOTTLE)) {
+            if (!level.isClientSide()) {
+                cashOut(reactor, player, stack);
+            }
+            return InteractionResult.SUCCESS;
+        }
         // Otherwise try a bucket fill/drain against the fluid capability, inside a transaction.
         if (level.isClientSide()) {
             return InteractionResult.SUCCESS;
@@ -92,5 +105,23 @@ public class BatchReactorBlock extends Block implements EntityBlock {
             player.openMenu(reactor, buf -> buf.writeBlockPos(pos));
         }
         return InteractionResult.SUCCESS;
+    }
+
+    /** Bottle a finished product: ethanol -> Swiftness potion, acetic acid (vinegar) -> Strength potion. */
+    private static void cashOut(BatchReactorBlockEntity reactor, Player player, ItemStack bottle) {
+        ItemStack potion;
+        if (reactor.extract(Species.ETHANOL, MOLES_PER_BOTTLE)) {
+            potion = PotionContents.createItemStack(Items.POTION, Potions.SWIFTNESS);
+        } else if (reactor.extract(Species.ACETIC_ACID, MOLES_PER_BOTTLE)) {
+            potion = PotionContents.createItemStack(Items.POTION, Potions.STRENGTH);
+        } else {
+            return; // nothing finished to cash out yet
+        }
+        if (!player.getAbilities().instabuild) {
+            bottle.shrink(1);
+        }
+        if (!player.addItem(potion)) {
+            player.drop(potion, false);
+        }
     }
 }

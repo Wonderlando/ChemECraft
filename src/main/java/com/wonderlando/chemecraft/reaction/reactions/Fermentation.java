@@ -13,7 +13,7 @@ import java.util.Set;
  */
 public class Fermentation extends Reaction {
     /** Tuned so a ~150 g/L batch finishes in ~1 in-game day, L/(mol*day). */
-    public static final double DEFAULT_RATE_CONSTANT = 0.3;
+    public static final double DEFAULT_RATE_CONSTANT = 10;
 
     public Fermentation() {
         this(DEFAULT_RATE_CONSTANT);
