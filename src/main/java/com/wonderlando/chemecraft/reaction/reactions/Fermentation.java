@@ -1,6 +1,6 @@
 package com.wonderlando.chemecraft.reaction.reactions;
 
-import com.wonderlando.chemecraft.reaction.ReactionRegistry;
+import com.wonderlando.chemecraft.reaction.Reaction;
 import com.wonderlando.chemecraft.reaction.Species;
 
 import java.util.Map;
@@ -11,7 +11,7 @@ import java.util.Set;
  * <pre>Substrate + Biomass -> 2 Biomass + 2 Ethanol + 2 CO2,  rate = k * [Substrate] * [Biomass]</pre>
  * A tunable caricature (not strictly mass-balanced) — adjust the coefficients or {@code k} freely.
  */
-public class Fermentation extends ReactionRegistry {
+public class Fermentation extends Reaction {
     /** Tuned so a ~150 g/L batch finishes in ~1 in-game day, L/(mol*day). */
     public static final double DEFAULT_RATE_CONSTANT = 2;
 

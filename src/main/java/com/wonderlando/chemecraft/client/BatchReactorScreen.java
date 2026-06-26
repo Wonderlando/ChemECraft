@@ -1,8 +1,8 @@
 package com.wonderlando.chemecraft.client;
 
 import com.wonderlando.chemecraft.menu.BatchReactorMenu;
+import com.wonderlando.chemecraft.reaction.Reaction;
 import com.wonderlando.chemecraft.reaction.ReactionRegistry;
-import com.wonderlando.chemecraft.reaction.Reactions;
 import com.wonderlando.chemecraft.reaction.Species;
 
 import java.util.EnumSet;
@@ -67,7 +67,7 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
         // Cycle button: click advances to the next reaction in the registry (wrapping).
         selector = Button.builder(Component.literal("Reaction: none"), b -> {
             int current = menu.value(SLOT_SELECTED);
-            int next = (current < 0) ? 0 : (current + 1) % Reactions.AVAILABLE.size();
+            int next = (current < 0) ? 0 : (current + 1) % ReactionRegistry.AVAILABLE.size();
             this.minecraft.gameMode.handleInventoryButtonClick(this.menu.containerId, next);
         }).bounds(leftPos + 8, topPos + 22, LEFT_W - 16, 18).build();
         addRenderableWidget(selector);
@@ -126,7 +126,7 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
         Font f = this.font;
         int x = left + 8;
 
-        ReactionRegistry reaction = Reactions.byIndex(menu.value(SLOT_SELECTED));
+        Reaction reaction = ReactionRegistry.byIndex(menu.value(SLOT_SELECTED));
         int waterMb = menu.value(SLOT_WATER_MB);
         int ethanolMb = menu.value(SLOT_ETHANOL_MB);
         double[] conc = currentConcentrations();
@@ -161,7 +161,7 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
         graphics.text(f, "  Water: " + waterMb + " mB", x, y, TEXT, true);
         y += 9;
         for (Species s : Species.values()) {
-            if (involved.contains(s) && Reactions.LIQUID_SPECIES.contains(s)) {
+            if (involved.contains(s) && ReactionRegistry.LIQUID_SPECIES.contains(s)) {
                 graphics.text(f, "  " + s.displayName() + ": " + liquidMb(s) + " mB", x, y, seriesColor(s), true);
                 y += 9;
             }
@@ -170,7 +170,7 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
 
         boolean anySolute = false;
         for (Species s : Species.values()) {
-            if (!involved.contains(s) || Reactions.LIQUID_SPECIES.contains(s)) {
+            if (!involved.contains(s) || ReactionRegistry.LIQUID_SPECIES.contains(s)) {
                 continue;
             }
             if (!anySolute) {
@@ -280,12 +280,12 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
     }
 
     private double currentRate(double[] conc) {
-        ReactionRegistry reaction = Reactions.byIndex(menu.value(SLOT_SELECTED));
+        Reaction reaction = ReactionRegistry.byIndex(menu.value(SLOT_SELECTED));
         return (reaction != null && menu.value(SLOT_WATER_MB) > 0) ? reaction.rate(conc) : 0.0;
     }
 
     /** Species the reaction consumes or produces (its reactants and products); empty when none selected. */
-    private static Set<Species> involvedSpecies(ReactionRegistry reaction) {
+    private static Set<Species> involvedSpecies(Reaction reaction) {
         if (reaction == null) {
             return Set.of();
         }

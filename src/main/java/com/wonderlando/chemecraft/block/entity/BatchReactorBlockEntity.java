@@ -2,8 +2,8 @@ package com.wonderlando.chemecraft.block.entity;
 
 import com.wonderlando.chemecraft.Config;
 import com.wonderlando.chemecraft.menu.BatchReactorMenu;
+import com.wonderlando.chemecraft.reaction.Reaction;
 import com.wonderlando.chemecraft.reaction.ReactionRegistry;
-import com.wonderlando.chemecraft.reaction.Reactions;
 import com.wonderlando.chemecraft.reaction.Species;
 import com.wonderlando.chemecraft.registry.ModBlockEntities;
 import com.wonderlando.chemecraft.registry.ModFluids;
@@ -38,7 +38,7 @@ import net.neoforged.neoforge.transfer.fluid.FluidStacksResourceHandler;
 /**
  * Block entity for the batch reactor: one shared, well-mixed vessel of fluids (water in, ethanol out)
  * plus the dissolved reaction state, tracked as molar amounts per {@link Species}. Each tick it advances
- * the selected mass-action {@link ReactionRegistry}, catching up elapsed time after a chunk reload.
+ * the selected mass-action {@link Reaction}, catching up elapsed time after a chunk reload.
  */
 public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider {
     /** Maximum number of distinct fluids the vessel can hold at once (one shared, well-mixed pool). */
@@ -59,7 +59,7 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
     private long lastGameTime = Long.MIN_VALUE;
 
     // The reaction the user selected for this reactor (ASPEN-style); NONE = idle until one is picked.
-    private int selectedReaction = Reactions.NONE;
+    private int selectedReaction = ReactionRegistry.NONE;
 
     private final FluidStacksResourceHandler tank = new FluidStacksResourceHandler(FLUID_SLOTS, CAPACITY_MB) {
         @Override
@@ -79,7 +79,7 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
             if (resource.isEmpty() || resource.getFluid() == Fluids.WATER) {
                 return true;
             }
-            for (Species product : Reactions.LIQUID_SPECIES) {
+            for (Species product : ReactionRegistry.LIQUID_SPECIES) {
                 if (resource.getFluid() == fluidFor(product)) {
                     return true;
                 }
@@ -157,13 +157,13 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
         return new BatchReactorMenu(containerId, playerInventory, this);
     }
 
-    /** Select which reaction this reactor runs (index into {@link Reactions#AVAILABLE}; -1 = none/idle). */
+    /** Select which reaction this reactor runs (index into {@link ReactionRegistry#AVAILABLE}; -1 = none/idle). */
     public void selectReaction(int index) {
         if (!isEmpty()) {
             return; // ASPEN-style: the reaction can only be changed while the reactor is empty
         }
-        ReactionRegistry reaction = Reactions.byIndex(index);
-        this.selectedReaction = (reaction == null) ? Reactions.NONE : index;
+        Reaction reaction = ReactionRegistry.byIndex(index);
+        this.selectedReaction = (reaction == null) ? ReactionRegistry.NONE : index;
         setChanged();
         if (level != null && !level.isClientSide()) {
             level.sendBlockUpdated(getBlockPos(), getBlockState(), getBlockState(), Block.UPDATE_ALL);
@@ -253,7 +253,7 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
             return;
         }
 
-        ReactionRegistry reaction = Reactions.byIndex(selectedReaction);
+        Reaction reaction = ReactionRegistry.byIndex(selectedReaction);
         if (reaction == null) {
             return; // ASPEN-style: nothing happens until the user selects a reaction
         }
@@ -300,7 +300,7 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
 
     /** Materialize each species the reaction network declares as a liquid product into tank fluid. */
     private void updateLiquidProducts() {
-        for (Species product : Reactions.LIQUID_SPECIES) {
+        for (Species product : ReactionRegistry.LIQUID_SPECIES) {
             Fluid fluid = fluidFor(product);
             if (fluid == null) {
                 continue; // declared as a liquid product, but no fluid is registered for it yet
@@ -385,7 +385,7 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
             amounts[species.ordinal()] = input.getDoubleOr("mol_" + species.name(), 0.0);
         }
         lastGameTime = input.getLongOr("lastGameTime", Long.MIN_VALUE);
-        selectedReaction = input.getIntOr("selectedReaction", Reactions.NONE);
+        selectedReaction = input.getIntOr("selectedReaction", ReactionRegistry.NONE);
     }
 
     @Override

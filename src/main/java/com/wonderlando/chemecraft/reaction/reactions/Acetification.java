@@ -1,6 +1,6 @@
 package com.wonderlando.chemecraft.reaction.reactions;
 
-import com.wonderlando.chemecraft.reaction.ReactionRegistry;
+import com.wonderlando.chemecraft.reaction.Reaction;
 import com.wonderlando.chemecraft.reaction.Species;
 
 import java.util.Map;
@@ -10,7 +10,7 @@ import java.util.Map;
  * reaction: Ethanol -> Acetic Acid, rate = k * [Ethanol]. O2 and water are treated as implicit.
  * Demonstrates a second reaction that consumes the first reaction's product.
  */
-public class Acetification extends ReactionRegistry {
+public class Acetification extends Reaction {
     /** First-order souring rate constant, 1/day. Tunable. */
     public static final double DEFAULT_RATE_CONSTANT = 0.05;
 
