@@ -1,7 +1,7 @@
 package com.wonderlando.chemecraft.client;
 
 import com.wonderlando.chemecraft.menu.BatchReactorMenu;
-import com.wonderlando.chemecraft.reaction.Reaction;
+import com.wonderlando.chemecraft.reaction.ReactionRegistry;
 import com.wonderlando.chemecraft.reaction.Reactions;
 import com.wonderlando.chemecraft.reaction.Species;
 
@@ -126,7 +126,7 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
         Font f = this.font;
         int x = left + 8;
 
-        Reaction reaction = Reactions.byIndex(menu.value(SLOT_SELECTED));
+        ReactionRegistry reaction = Reactions.byIndex(menu.value(SLOT_SELECTED));
         int waterMb = menu.value(SLOT_WATER_MB);
         int ethanolMb = menu.value(SLOT_ETHANOL_MB);
         double[] conc = currentConcentrations();
@@ -280,12 +280,12 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
     }
 
     private double currentRate(double[] conc) {
-        Reaction reaction = Reactions.byIndex(menu.value(SLOT_SELECTED));
+        ReactionRegistry reaction = Reactions.byIndex(menu.value(SLOT_SELECTED));
         return (reaction != null && menu.value(SLOT_WATER_MB) > 0) ? reaction.rate(conc) : 0.0;
     }
 
     /** Species the reaction consumes or produces (its reactants and products); empty when none selected. */
-    private static Set<Species> involvedSpecies(Reaction reaction) {
+    private static Set<Species> involvedSpecies(ReactionRegistry reaction) {
         if (reaction == null) {
             return Set.of();
         }

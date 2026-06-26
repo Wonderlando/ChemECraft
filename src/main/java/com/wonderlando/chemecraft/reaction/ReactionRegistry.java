@@ -13,12 +13,12 @@ import java.util.stream.Collectors;
  *
  * <p>To add a new reaction, subclass this and pass the stoichiometry to {@code super(...)}.
  */
-public abstract class Reaction {
+public abstract class ReactionRegistry {
     private final Map<Species, Integer> reactants;
     private final Map<Species, Integer> products;
     private final double rateConstant;
 
-    protected Reaction(Map<Species, Integer> reactants, Map<Species, Integer> products, double rateConstant) {
+    protected ReactionRegistry(Map<Species, Integer> reactants, Map<Species, Integer> products, double rateConstant) {
         this.reactants = Map.copyOf(reactants);
         this.products = Map.copyOf(products);
         this.rateConstant = rateConstant;
@@ -36,6 +36,33 @@ public abstract class Reaction {
     /** Net stoichiometric coefficient for a species (negative = consumed, positive = produced). */
     public double net(Species species) {
         return products.getOrDefault(species, 0) - reactants.getOrDefault(species, 0);
+    }
+
+    /**
+     * Advance molar {@code amounts} (indexed by {@link Species#ordinal()}) by one forward-Euler step of
+     * {@code dtDays} under this reaction: the rate is evaluated at the current concentrations
+     * (amount / volume) and applied through the net stoichiometry, with amounts clamped non-negative.
+     * (For several simultaneous reactions in one vessel, evaluate all rates first, then apply.)
+     */
+    public void step(double[] amounts, double volumeL, double dtDays) {
+        if (volumeL <= 0.0 || dtDays <= 0.0) {
+            return;
+        }
+        double[] concentration = new double[amounts.length];
+        for (int i = 0; i < amounts.length; i++) {
+            concentration[i] = amounts[i] / volumeL;
+        }
+        double r = rate(concentration);
+        if (r <= 0.0) {
+            return;
+        }
+        for (Species species : Species.values()) {
+            double nu = net(species);
+            if (nu != 0.0) {
+                int i = species.ordinal();
+                amounts[i] = Math.max(0.0, amounts[i] + nu * r * volumeL * dtDays);
+            }
+        }
     }
 
     /**

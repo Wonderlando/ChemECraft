@@ -2,15 +2,13 @@ package com.wonderlando.chemecraft.block.entity;
 
 import com.wonderlando.chemecraft.Config;
 import com.wonderlando.chemecraft.menu.BatchReactorMenu;
-import com.wonderlando.chemecraft.reaction.Reaction;
-import com.wonderlando.chemecraft.reaction.ReactionNetwork;
+import com.wonderlando.chemecraft.reaction.ReactionRegistry;
 import com.wonderlando.chemecraft.reaction.Reactions;
 import com.wonderlando.chemecraft.reaction.Species;
 import com.wonderlando.chemecraft.registry.ModBlockEntities;
 import com.wonderlando.chemecraft.registry.ModFluids;
 
 import java.util.Arrays;
-import java.util.List;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -40,7 +38,7 @@ import net.neoforged.neoforge.transfer.fluid.FluidStacksResourceHandler;
 /**
  * Block entity for the batch reactor: one shared, well-mixed vessel of fluids (water in, ethanol out)
  * plus the dissolved reaction state, tracked as molar amounts per {@link Species}. Each tick it advances
- * its mass-action {@link ReactionNetwork}, catching up elapsed time after a chunk reload.
+ * the selected mass-action {@link ReactionRegistry}, catching up elapsed time after a chunk reload.
  */
 public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider {
     /** Maximum number of distinct fluids the vessel can hold at once (one shared, well-mixed pool). */
@@ -62,7 +60,6 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
 
     // The reaction the user selected for this reactor (ASPEN-style); NONE = idle until one is picked.
     private int selectedReaction = Reactions.NONE;
-    private ReactionNetwork activeNetwork = new ReactionNetwork(List.of());
 
     private final FluidStacksResourceHandler tank = new FluidStacksResourceHandler(FLUID_SLOTS, CAPACITY_MB) {
         @Override
@@ -165,9 +162,8 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
         if (!isEmpty()) {
             return; // ASPEN-style: the reaction can only be changed while the reactor is empty
         }
-        Reaction reaction = Reactions.byIndex(index);
+        ReactionRegistry reaction = Reactions.byIndex(index);
         this.selectedReaction = (reaction == null) ? Reactions.NONE : index;
-        this.activeNetwork = (reaction == null) ? new ReactionNetwork(List.of()) : new ReactionNetwork(reaction);
         setChanged();
         if (level != null && !level.isClientSide()) {
             level.sendBlockUpdated(getBlockPos(), getBlockState(), getBlockState(), Block.UPDATE_ALL);
@@ -257,7 +253,7 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
             return;
         }
 
-        Reaction reaction = Reactions.byIndex(selectedReaction);
+        ReactionRegistry reaction = Reactions.byIndex(selectedReaction);
         if (reaction == null) {
             return; // ASPEN-style: nothing happens until the user selects a reaction
         }
@@ -286,7 +282,7 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
                 Math.max(1L, (long) Math.ceil(totalModelDays / MAX_SUBSTEP_DAYS)));
         double dtDays = totalModelDays / steps;
         for (int i = 0; i < steps; i++) {
-            activeNetwork.step(amounts, volumeL, dtDays);
+            reaction.step(amounts, volumeL, dtDays);
         }
 
         updateLiquidProducts();
@@ -390,8 +386,6 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
         }
         lastGameTime = input.getLongOr("lastGameTime", Long.MIN_VALUE);
         selectedReaction = input.getIntOr("selectedReaction", Reactions.NONE);
-        Reaction loaded = Reactions.byIndex(selectedReaction);
-        activeNetwork = (loaded == null) ? new ReactionNetwork(List.of()) : new ReactionNetwork(loaded);
     }
 
     @Override

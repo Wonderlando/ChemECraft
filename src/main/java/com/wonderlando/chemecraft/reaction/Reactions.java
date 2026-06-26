@@ -15,7 +15,7 @@ public final class Reactions {
     /** Sentinel index meaning "no reaction selected". */
     public static final int NONE = -1;
 
-    public static final List<Reaction> AVAILABLE = List.of(
+    public static final List<ReactionRegistry> AVAILABLE = List.of(
             new Fermentation(),
             new Acetification());
 
@@ -29,13 +29,13 @@ public final class Reactions {
     private Reactions() {}
 
     /** The reaction at an index, or null for {@link #NONE} / out of range. */
-    public static Reaction byIndex(int index) {
+    public static ReactionRegistry byIndex(int index) {
         return (index >= 0 && index < AVAILABLE.size()) ? AVAILABLE.get(index) : null;
     }
 
     private static Set<Species> liquidSpecies() {
         EnumSet<Species> set = EnumSet.noneOf(Species.class);
-        for (Reaction reaction : AVAILABLE) {
+        for (ReactionRegistry reaction : AVAILABLE) {
             set.addAll(reaction.liquidProducts());
         }
         return set;
