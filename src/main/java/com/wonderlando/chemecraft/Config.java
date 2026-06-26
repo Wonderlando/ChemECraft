@@ -40,6 +40,15 @@ public class Config {
                     "Default ~0.00125 makes a typical batch finish in roughly one in-game day (24000 ticks).")
             .defineInRange("reactionModelDaysPerTick", 0.00125, 0.0, 1.0);
 
+    public static final ModConfigSpec.DoubleValue REACTOR_AMBIENT_TEMPERATURE_K = BUILDER
+            .comment("Ambient temperature the reactor starts at and cools toward, in kelvin (298 K ~= 25 C).")
+            .defineInRange("reactorAmbientTemperatureK", 298.0, 0.0, 1000.0);
+
+    public static final ModConfigSpec.DoubleValue REACTOR_COOLING_PER_DAY = BUILDER
+            .comment("Newton's-law-of-cooling constant K in dT/dt = -K*(T - T_ambient), per model-day.",
+                    "Higher = the reactor loses heat to the environment faster.")
+            .defineInRange("reactorCoolingPerDay", 0.2, 0.0, 100.0);
+
     static final ModConfigSpec SPEC = BUILDER.build();
 
     private static boolean validateItemName(final Object obj) {

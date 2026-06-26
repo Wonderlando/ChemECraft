@@ -14,6 +14,10 @@ import java.util.Set;
 public class Fermentation extends Reaction {
     /** Tuned so a ~150 g/L batch finishes in ~1 in-game day, L/(mol*day). */
     public static final double DEFAULT_RATE_CONSTANT = 2;
+    /** Exothermic heat of reaction per mole of extent (one substrate consumed), in joules. */
+    public static final double DEFAULT_ENTHALPY = -100_000.0;
+    /** Activation energy, J/mol — ~Q10 of 1.9 (rate nearly doubles per +10 K), typical of yeast kinetics. */
+    public static final double DEFAULT_ACTIVATION_ENERGY = 50_000.0;
 
     public Fermentation() {
         this(DEFAULT_RATE_CONSTANT);
@@ -30,5 +34,15 @@ public class Fermentation extends Reaction {
     @Override
     public Set<Species> liquidProducts() {
         return Set.of(Species.ETHANOL);
+    }
+
+    @Override
+    public double enthalpy() {
+        return DEFAULT_ENTHALPY;
+    }
+
+    @Override
+    public double activationEnergyForward() {
+        return DEFAULT_ACTIVATION_ENERGY;
     }
 }

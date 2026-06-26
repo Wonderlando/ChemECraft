@@ -48,15 +48,18 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
     /** Fermentable substrate added per wheat item, in grams. */
     public static final double SUBSTRATE_PER_WHEAT_G = 50.0;
     /** Number of synced display values exposed to the GUI. */
-    public static final int DISPLAY_SLOTS = 7;
+    public static final int DISPLAY_SLOTS = 8;
 
     private static final double SEED_BIOMASS_G_PER_L = 0.5; // auto-seeded yeast inoculum
     private static final int MAX_CATCHUP_SUBSTEPS = 2000;
     private static final double MAX_SUBSTEP_DAYS = 0.05;
+    private static final double CP_WATER = 4.184; // specific heat of water, J/(g*K)
 
     // Reaction state: molar amounts (mol) per species, indexed by Species.ordinal().
     private final double[] amounts = new double[Species.values().length];
     private long lastGameTime = Long.MIN_VALUE;
+    // Bulk temperature of the (well-mixed) vessel contents, in kelvin. Starts at ambient (298 K).
+    private double temperatureK = 298.0;
 
     // The reaction the user selected for this reactor (ASPEN-style); NONE = idle until one is picked.
     private int selectedReaction = ReactionRegistry.NONE;
@@ -143,8 +146,13 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
             case 4 -> (int) Math.round(amounts[Species.CARBON_DIOXIDE.ordinal()] * 1000.0);
             case 5 -> (int) Math.round(amounts[Species.ACETIC_ACID.ordinal()] * 1000.0);
             case 6 -> selectedReaction;
+            case 7 -> (int) Math.round(temperatureK * 10.0); // deci-kelvin (0.1 K precision)
             default -> 0;
         };
+    }
+
+    public double getTemperatureK() {
+        return temperatureK;
     }
 
     @Override
@@ -181,6 +189,7 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
         }
         Arrays.fill(amounts, 0.0);
         lastGameTime = Long.MIN_VALUE;
+        temperatureK = Config.REACTOR_AMBIENT_TEMPERATURE_K.get();
         setChanged();
         if (level != null && !level.isClientSide()) {
             level.sendBlockUpdated(getBlockPos(), getBlockState(), getBlockState(), Block.UPDATE_ALL);
@@ -253,29 +262,12 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
             return;
         }
 
-        Reaction reaction = ReactionRegistry.byIndex(selectedReaction);
-        if (reaction == null) {
-            return; // ASPEN-style: nothing happens until the user selects a reaction
-        }
+        double ambient = Config.REACTOR_AMBIENT_TEMPERATURE_K.get();
         double volumeL = getWaterMb() / 1000.0;
         if (volumeL <= 0.0) {
-            return; // need a solvent
-        }
-        if (totalFluidMb() >= CAPACITY_MB) {
-            return; // vessel is full — hold the reaction so liquid products can't overflow the max level
-        }
-
-        // Seed the inoculum/catalyst the selected reaction needs (e.g. yeast for fermentation).
-        boolean seeded = false;
-        if (reaction.reactants().containsKey(Species.BIOMASS) && amounts[Species.BIOMASS.ordinal()] <= 0.0) {
-            amounts[Species.BIOMASS.ordinal()] = SEED_BIOMASS_G_PER_L * volumeL / Species.BIOMASS.molarMass();
-            seeded = true;
-        }
-
-        // Nothing to do if the selected reaction is at equilibrium / can't proceed in either direction.
-        // (Net rate may be negative for a reversible reaction running backwards, so test for zero, not <= 0.)
-        if (reaction.rate(concentrations(volumeL)) == 0.0) {
-            if (seeded) {
+            // No solvent to hold heat: there is nothing to react in and no thermal mass, so sit at ambient.
+            if (temperatureK != ambient) {
+                temperatureK = ambient;
                 setChanged();
             }
             return;
@@ -285,21 +277,37 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
         int steps = (int) Math.min(MAX_CATCHUP_SUBSTEPS,
                 Math.max(1L, (long) Math.ceil(totalModelDays / MAX_SUBSTEP_DAYS)));
         double dtDays = totalModelDays / steps;
+
+        Reaction reaction = ReactionRegistry.byIndex(selectedReaction);
+        // ASPEN-style: react only with a selected reaction and only while there is room for liquid products.
+        boolean canReact = reaction != null && totalFluidMb() < CAPACITY_MB;
+
+        // Seed the inoculum/catalyst the selected reaction needs (e.g. yeast for fermentation).
+        if (canReact && reaction.reactants().containsKey(Species.BIOMASS)
+                && amounts[Species.BIOMASS.ordinal()] <= 0.0) {
+            amounts[Species.BIOMASS.ordinal()] = SEED_BIOMASS_G_PER_L * volumeL / Species.BIOMASS.molarMass();
+        }
+
+        // Thermal mass = mass of solvent (water, 1 mB ~= 1 g) times its specific heat. Larger batches
+        // heat up more slowly for the same heat of reaction.
+        double heatCapacity = getWaterMb() * CP_WATER; // J/K
+        double coolingK = Config.REACTOR_COOLING_PER_DAY.get();
         for (int i = 0; i < steps; i++) {
-            reaction.step(amounts, volumeL, dtDays);
+            if (canReact) {
+                double extent = reaction.step(amounts, volumeL, dtDays, temperatureK); // moles this substep
+                if (extent != 0.0 && heatCapacity > 0.0) {
+                    // Exothermic (enthalpy < 0) releases heat; a reverse step (extent < 0) absorbs it.
+                    temperatureK += (-reaction.enthalpy() * extent) / heatCapacity;
+                }
+            }
+            // Newton's law of cooling toward ambient, integrated exactly (stable for any step size).
+            temperatureK = ambient + (temperatureK - ambient) * Math.exp(-coolingK * dtDays);
         }
 
-        updateLiquidProducts();
+        if (canReact) {
+            updateLiquidProducts();
+        }
         setChanged();
-    }
-
-    /** Current molar concentrations (mol/L) indexed by {@link Species#ordinal()}. */
-    private double[] concentrations(double volumeL) {
-        double[] concentration = new double[amounts.length];
-        for (int i = 0; i < amounts.length; i++) {
-            concentration[i] = amounts[i] / volumeL;
-        }
-        return concentration;
     }
 
     /** Materialize each species the reaction network declares as a liquid product into tank fluid. */
@@ -376,6 +384,7 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
         }
         output.putLong("lastGameTime", lastGameTime);
         output.putInt("selectedReaction", selectedReaction);
+        output.putDouble("temperatureK", temperatureK);
     }
 
     @Override
@@ -390,6 +399,7 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
         }
         lastGameTime = input.getLongOr("lastGameTime", Long.MIN_VALUE);
         selectedReaction = input.getIntOr("selectedReaction", ReactionRegistry.NONE);
+        temperatureK = input.getDoubleOr("temperatureK", Config.REACTOR_AMBIENT_TEMPERATURE_K.get());
     }
 
     @Override

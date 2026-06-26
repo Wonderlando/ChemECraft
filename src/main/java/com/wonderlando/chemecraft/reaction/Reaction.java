@@ -20,6 +20,11 @@ import java.util.stream.Collectors;
  * temperature-dependent kinetics.
  */
 public abstract class Reaction {
+    /** Universal gas constant, J/(mol*K). */
+    public static final double GAS_CONSTANT = 8.314;
+    /** Temperature at which the rate constants are quoted; the Arrhenius factor is 1 here. */
+    public static final double REFERENCE_TEMPERATURE_K = 298.0;
+
     private final Map<Species, Integer> reactants;
     private final Map<Species, Integer> products;
     private final double forwardRateConstant;
@@ -39,22 +44,36 @@ public abstract class Reaction {
         this.reverseRateConstant = reverseRateConstant;
     }
 
-    /** Forward (left-to-right) mass-action rate from molar concentrations (indexed by {@link Species#ordinal()}). */
-    public double forwardRate(double[] concentration) {
-        return massAction(forwardRateConstant, reactants, concentration);
+    /** Forward (left-to-right) mass-action rate at temperature {@code temperatureK} (kelvin). */
+    public double forwardRate(double[] concentration, double temperatureK) {
+        double k = forwardRateConstant * arrheniusFactor(activationEnergyForward(), temperatureK);
+        return massAction(k, reactants, concentration);
     }
 
-    /** Reverse (right-to-left) mass-action rate; zero for an irreversible reaction. */
-    public double reverseRate(double[] concentration) {
+    /** Reverse (right-to-left) mass-action rate at temperature {@code temperatureK}; zero if irreversible. */
+    public double reverseRate(double[] concentration, double temperatureK) {
         if (reverseRateConstant == 0.0) {
             return 0.0;
         }
-        return massAction(reverseRateConstant, products, concentration);
+        double k = reverseRateConstant * arrheniusFactor(activationEnergyReverse(), temperatureK);
+        return massAction(k, products, concentration);
     }
 
-    /** Net reaction rate (forward - reverse). Positive runs the reaction forward, negative runs it backward. */
-    public double rate(double[] concentration) {
-        return forwardRate(concentration) - reverseRate(concentration);
+    /** Net reaction rate (forward - reverse) at {@code temperatureK}. Positive runs forward, negative backward. */
+    public double rate(double[] concentration, double temperatureK) {
+        return forwardRate(concentration, temperatureK) - reverseRate(concentration, temperatureK);
+    }
+
+    /**
+     * The Arrhenius temperature factor relative to {@link #REFERENCE_TEMPERATURE_K}:
+     * {@code exp((Ea/R) * (1/T_ref - 1/T))}. Equals 1 at the reference temperature, &gt;1 hotter, &lt;1
+     * colder. With {@code Ea == 0} the rate is temperature-independent (factor 1).
+     */
+    private static double arrheniusFactor(double activationEnergy, double temperatureK) {
+        if (activationEnergy == 0.0 || temperatureK <= 0.0) {
+            return 1.0;
+        }
+        return Math.exp(activationEnergy / GAS_CONSTANT * (1.0 / REFERENCE_TEMPERATURE_K - 1.0 / temperatureK));
     }
 
     private static double massAction(double rateConstant, Map<Species, Integer> terms, double[] concentration) {
@@ -76,18 +95,21 @@ public abstract class Reaction {
      * (amount / volume) and applied through the net stoichiometry, with amounts clamped non-negative. A
      * negative net rate runs the reaction in reverse (consuming products, regenerating reactants).
      * (For several simultaneous reactions in one vessel, evaluate all rates first, then apply.)
+     *
+     * @return the reaction extent for this step in moles ({@code netRate * volume * dt}); positive for a
+     *         forward step, negative for a reverse one. Multiply by {@code -enthalpy()} to get heat released.
      */
-    public void step(double[] amounts, double volumeL, double dtDays) {
+    public double step(double[] amounts, double volumeL, double dtDays, double temperatureK) {
         if (volumeL <= 0.0 || dtDays <= 0.0) {
-            return;
+            return 0.0;
         }
         double[] concentration = new double[amounts.length];
         for (int i = 0; i < amounts.length; i++) {
             concentration[i] = amounts[i] / volumeL;
         }
-        double r = rate(concentration);
+        double r = rate(concentration, temperatureK);
         if (r == 0.0) {
-            return;
+            return 0.0;
         }
         for (Species species : Species.values()) {
             double nu = net(species);
@@ -96,6 +118,7 @@ public abstract class Reaction {
                 amounts[i] = Math.max(0.0, amounts[i] + nu * r * volumeL * dtDays);
             }
         }
+        return r * volumeL * dtDays;
     }
 
     /**
@@ -105,6 +128,28 @@ public abstract class Reaction {
      */
     public Set<Species> liquidProducts() {
         return Set.of();
+    }
+
+    /**
+     * Standard enthalpy of reaction per mole of reaction extent, in joules. NEGATIVE is exothermic
+     * (releases heat). Default 0 = thermally neutral; override to give a reaction a heat of reaction.
+     * Heat released over a step is {@code -enthalpy() * step(...)} (the reverse direction absorbs it).
+     */
+    public double enthalpy() {
+        return 0.0;
+    }
+
+    /**
+     * Activation energy of the FORWARD reaction in J/mol, used by the Arrhenius temperature dependence.
+     * Default 0 = temperature-independent. Higher Ea = more sensitive to temperature.
+     */
+    public double activationEnergyForward() {
+        return 0.0;
+    }
+
+    /** Activation energy of the REVERSE reaction in J/mol (only relevant when reversible). Default 0. */
+    public double activationEnergyReverse() {
+        return 0.0;
     }
 
     public double forwardRateConstant() {

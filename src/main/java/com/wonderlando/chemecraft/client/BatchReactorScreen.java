@@ -35,9 +35,10 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
     private static final int SLOT_CO2_MMOL = 4;
     private static final int SLOT_ACETIC_MMOL = 5;
     private static final int SLOT_SELECTED = 6;
+    private static final int SLOT_TEMP_DK = 7; // temperature in deci-kelvin (0.1 K)
 
     private static final int IMAGE_W = 380;
-    private static final int IMAGE_H = 200;
+    private static final int IMAGE_H = 220;
     private static final int LEFT_W = 206; // width of the left (readout + controls) column
 
     // Layout of the left column: a thin level gauge, then the text/controls content.
@@ -63,6 +64,7 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
     private static final int TITLE = 0xFFFFFFFF;
     private static final int RATE_COLOR = 0xFFFFFFFF;
     private static final int WATER_COLOR = 0xFF4060C8;
+    private static final int TEMP_COLOR = 0xFFFF9050; // warm orange for the temperature readout
 
     private Button selector;
     private Button plotToggle;
@@ -172,6 +174,10 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
             graphics.text(f, "Pick a reaction above to start.", x, y, TEXT, true);
             y += 14;
         }
+
+        double tempK = menu.value(SLOT_TEMP_DK) / 10.0;
+        graphics.text(f, String.format("Temp: %.1f K  (%.1f °C)", tempK, tempK - 273.15), x, y, TEMP_COLOR, true);
+        y += 13;
 
         // Show only the species the selected reaction involves (plus water, the solvent).
         Set<Species> involved = involvedSpecies(reaction);
@@ -364,7 +370,8 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
 
     private double currentRate(double[] conc) {
         Reaction reaction = ReactionRegistry.byIndex(menu.value(SLOT_SELECTED));
-        return (reaction != null && menu.value(SLOT_WATER_MB) > 0) ? reaction.rate(conc) : 0.0;
+        double tempK = menu.value(SLOT_TEMP_DK) / 10.0;
+        return (reaction != null && menu.value(SLOT_WATER_MB) > 0) ? reaction.rate(conc, tempK) : 0.0;
     }
 
     /** Species the reaction consumes or produces (its reactants and products); empty when none selected. */
