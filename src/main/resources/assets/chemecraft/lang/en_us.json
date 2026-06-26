@@ -1,6 +1,7 @@
 {
   "itemGroup.chemecraft": "ChemECraft",
   "block.chemecraft.batch_reactor": "Batch Reactor",
+  "block.chemecraft.batch_reactor_casing": "Batch Reactor Casing",
   "fluid.chemecraft.ethanol": "Ethanol",
 
   "chemecraft.configuration.title": "ChemECraft Configs",

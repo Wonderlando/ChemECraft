@@ -43,8 +43,8 @@ import net.neoforged.neoforge.transfer.fluid.FluidStacksResourceHandler;
 public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider {
     /** Maximum number of distinct fluids the vessel can hold at once (one shared, well-mixed pool). */
     public static final int FLUID_SLOTS = 6;
-    /** Shared working volume across all fluids, in millibuckets. Provisional mapping: 1000 mB = 1 L. */
-    public static final int CAPACITY_MB = 16_000;
+    /** Shared working volume across all fluids, in millibuckets (27 buckets). Provisional mapping: 1000 mB = 1 L. */
+    public static final int CAPACITY_MB = 27_000;
     /** Fermentable substrate added per wheat item, in grams. */
     public static final double SUBSTRATE_PER_WHEAT_G = 50.0;
     /** Number of synced display values exposed to the GUI. */
@@ -260,6 +260,9 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
         double volumeL = getWaterMb() / 1000.0;
         if (volumeL <= 0.0) {
             return; // need a solvent
+        }
+        if (totalFluidMb() >= CAPACITY_MB) {
+            return; // vessel is full — hold the reaction so liquid products can't overflow the max level
         }
 
         // Seed the inoculum/catalyst the selected reaction needs (e.g. yeast for fermentation).

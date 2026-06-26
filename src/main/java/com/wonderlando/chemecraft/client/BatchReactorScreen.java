@@ -1,11 +1,14 @@
 package com.wonderlando.chemecraft.client;
 
+import com.wonderlando.chemecraft.block.entity.BatchReactorBlockEntity;
 import com.wonderlando.chemecraft.menu.BatchReactorMenu;
 import com.wonderlando.chemecraft.reaction.Reaction;
 import com.wonderlando.chemecraft.reaction.ReactionRegistry;
 import com.wonderlando.chemecraft.reaction.Species;
 
+import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.Map;
 import java.util.Set;
 
 import net.minecraft.client.gui.Font;
@@ -13,13 +16,15 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.entity.player.Inventory;
 
 /**
- * Display + control screen for the batch reactor. The left column shows the selected reaction, liquids,
- * solutes (amount + concentration), and the current rate; the right side shows a live rolling plot of
- * concentrations (or the reaction rate) over time. The plot history is sampled client-side while the GUI
- * is open, so it resets when the screen is closed.
+ * Display + control screen for the batch reactor. A vertical level gauge on the far left shows how full the
+ * vessel is (out of its bucket capacity); the left column shows the selected reaction, liquids, solutes
+ * (amount + concentration), and the current rate; the right side shows a live rolling plot of concentrations
+ * (or the reaction rate) over time. The plot history is sampled client-side while the GUI is open, so it
+ * resets when the screen is closed.
  */
 public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu> {
     // Synced display-slot indices (see BatchReactorBlockEntity#getDisplaySlot).
@@ -35,6 +40,16 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
     private static final int IMAGE_H = 200;
     private static final int LEFT_W = 206; // width of the left (readout + controls) column
 
+    // Layout of the left column: a thin level gauge, then the text/controls content.
+    private static final int GAUGE_X = 8;   // gauge left edge, relative to panel origin
+    private static final int GAUGE_W = 8;
+    private static final int GAUGE_TOP = 22;
+    private static final int GAUGE_BOTTOM = IMAGE_H - 30;
+    private static final int CONTENT_X = GAUGE_X + GAUGE_W + 6; // text/buttons start here
+    private static final int CONTENT_W = LEFT_W - CONTENT_X - 8;
+
+    private static final int CAPACITY_MB = BatchReactorBlockEntity.CAPACITY_MB;
+
     private static final int HISTORY = 240;     // samples retained (~2 min at SAMPLE_TICKS = 10)
     private static final int SAMPLE_TICKS = 10;  // take a sample every N client ticks
 
@@ -43,9 +58,11 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
     private static final int BORDER = 0xFF000000;
     private static final int HEADER = 0xFFFFC864;
     private static final int TEXT = 0xFFE0E0E0;
+    private static final int NEUTRAL = TEXT & 0xFFFFFF; // RGB form for styled Components
     private static final int AXIS = 0xFF808080;
     private static final int TITLE = 0xFFFFFFFF;
     private static final int RATE_COLOR = 0xFFFFFFFF;
+    private static final int WATER_COLOR = 0xFF4060C8;
 
     private Button selector;
     private Button plotToggle;
@@ -69,13 +86,13 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
             int current = menu.value(SLOT_SELECTED);
             int next = (current < 0) ? 0 : (current + 1) % ReactionRegistry.AVAILABLE.size();
             this.minecraft.gameMode.handleInventoryButtonClick(this.menu.containerId, next);
-        }).bounds(leftPos + 8, topPos + 22, LEFT_W - 16, 18).build();
+        }).bounds(leftPos + CONTENT_X, topPos + 22, CONTENT_W, 18).build();
         addRenderableWidget(selector);
 
         // Empty/reset button: discards all contents (always available).
         Button emptyButton = Button.builder(Component.literal("Empty Reactor"), b ->
                 this.minecraft.gameMode.handleInventoryButtonClick(this.menu.containerId, BatchReactorMenu.BUTTON_EMPTY))
-                .bounds(leftPos + 8, topPos + IMAGE_H - 26, LEFT_W - 16, 18).build();
+                .bounds(leftPos + CONTENT_X, topPos + IMAGE_H - 26, CONTENT_W, 18).build();
         addRenderableWidget(emptyButton);
 
         // Plot mode toggle (client-only display state).
@@ -124,7 +141,7 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
         int left = this.leftPos;
         int top = this.topPos;
         Font f = this.font;
-        int x = left + 8;
+        int x = left + CONTENT_X;
 
         Reaction reaction = ReactionRegistry.byIndex(menu.value(SLOT_SELECTED));
         int waterMb = menu.value(SLOT_WATER_MB);
@@ -144,10 +161,13 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
 
         graphics.text(f, this.title, x, top + 8, TITLE, true);
 
+        drawGauge(graphics, f, waterMb, ethanolMb);
+
         int y = top + 44;
         if (reaction != null) {
-            graphics.textWithWordWrap(f, Component.literal(reaction.equation()), x, y, LEFT_W - 16, TEXT);
-            y += 20;
+            Component eq = equationComponent(reaction);
+            graphics.textWithWordWrap(f, eq, x, y, CONTENT_W, TEXT);
+            y += f.split(eq, CONTENT_W).size() * 9 + 6;
         } else {
             graphics.text(f, "Pick a reaction above to start.", x, y, TEXT, true);
             y += 14;
@@ -158,7 +178,7 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
 
         graphics.text(f, "Liquids", x, y, HEADER, true);
         y += 10;
-        graphics.text(f, "  Water: " + waterMb + " mB", x, y, TEXT, true);
+        graphics.text(f, "  Water: " + waterMb + " mB", x, y, WATER_COLOR, true);
         y += 9;
         for (Species s : Species.values()) {
             if (involved.contains(s) && ReactionRegistry.LIQUID_SPECIES.contains(s)) {
@@ -166,7 +186,9 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
                 y += 9;
             }
         }
-        y += 4;
+        graphics.text(f, String.format("  Fill: %.1f / %d B", (waterMb + ethanolMb) / 1000.0, CAPACITY_MB / 1000),
+                x, y, TEXT, true);
+        y += 13;
 
         boolean anySolute = false;
         for (Species s : Species.values()) {
@@ -191,6 +213,67 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
     @Override
     protected void extractLabels(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         // All content is drawn in extractContents / extractBackground; suppress default labels.
+    }
+
+    /** A vertical level gauge: total fill out of the vessel capacity, water and ethanol stacked from the bottom. */
+    private void drawGauge(GuiGraphicsExtractor graphics, Font f, int waterMb, int ethanolMb) {
+        int gx0 = leftPos + GAUGE_X;
+        int gx1 = gx0 + GAUGE_W;
+        int gy0 = topPos + GAUGE_TOP;
+        int gy1 = topPos + GAUGE_BOTTOM;
+
+        graphics.fill(gx0, gy0, gx1, gy1, PLOT_BG);
+
+        int innerTop = gy0 + 1;
+        int innerBottom = gy1 - 1;
+        int innerH = innerBottom - innerTop;
+
+        int waterH = (int) Math.round(Math.min(waterMb, CAPACITY_MB) / (double) CAPACITY_MB * innerH);
+        int ethCap = Math.max(0, CAPACITY_MB - waterMb);
+        int ethH = (int) Math.round(Math.min(ethanolMb, ethCap) / (double) CAPACITY_MB * innerH);
+        waterH = Math.min(waterH, innerH);
+        ethH = Math.min(ethH, innerH - waterH);
+
+        if (waterH > 0) {
+            graphics.fill(gx0 + 1, innerBottom - waterH, gx1 - 1, innerBottom, WATER_COLOR);
+        }
+        if (ethH > 0) {
+            int top = innerBottom - waterH - ethH;
+            graphics.fill(gx0 + 1, top, gx1 - 1, innerBottom - waterH, seriesColor(Species.ETHANOL));
+        }
+
+        // Tick marks at each third of capacity (9 B intervals), then the border on top.
+        graphics.fill(gx0 + 1, innerTop + innerH / 3, gx1 - 1, innerTop + innerH / 3 + 1, AXIS);
+        graphics.fill(gx0 + 1, innerTop + 2 * innerH / 3, gx1 - 1, innerTop + 2 * innerH / 3 + 1, AXIS);
+        graphics.fill(gx0, gy0, gx1, gy0 + 1, BORDER);
+        graphics.fill(gx0, gy1 - 1, gx1, gy1, BORDER);
+        graphics.fill(gx0, gy0, gx0 + 1, gy1, BORDER);
+        graphics.fill(gx1 - 1, gy0, gx1, gy1, BORDER);
+    }
+
+    /** The reaction equation as a styled component, with each species name in its plot/readout colour. */
+    private static Component equationComponent(Reaction reaction) {
+        MutableComponent c = Component.empty();
+        appendSide(c, reaction.reactants());
+        c.append(Component.literal("  →  ").withColor(NEUTRAL));
+        appendSide(c, reaction.products());
+        return c;
+    }
+
+    private static void appendSide(MutableComponent out, Map<Species, Integer> terms) {
+        boolean[] first = {true};
+        terms.entrySet().stream()
+                .sorted(Comparator.comparingInt(e -> e.getKey().ordinal()))
+                .forEach(e -> {
+                    if (!first[0]) {
+                        out.append(Component.literal(" + ").withColor(NEUTRAL));
+                    }
+                    first[0] = false;
+                    if (e.getValue() != 1) {
+                        out.append(Component.literal(e.getValue() + " ").withColor(NEUTRAL));
+                    }
+                    out.append(Component.literal(e.getKey().displayName()).withColor(seriesColor(e.getKey()) & 0xFFFFFF));
+                });
     }
 
     private void drawPlot(GuiGraphicsExtractor graphics, Font f, Set<Species> involved) {
