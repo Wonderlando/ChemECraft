@@ -1,0 +1,17 @@
+{
+  "multipart": [
+    { "when": { "facing": "north" }, "apply": { "model": "chemecraft:block/pipe_core" } },
+    { "when": { "facing": "east"  }, "apply": { "model": "chemecraft:block/pipe_core", "y": 90 } },
+    { "when": { "facing": "south" }, "apply": { "model": "chemecraft:block/pipe_core", "y": 180 } },
+    { "when": { "facing": "west"  }, "apply": { "model": "chemecraft:block/pipe_core", "y": 270 } },
+    { "when": { "facing": "up"    }, "apply": { "model": "chemecraft:block/pipe_core_up" } },
+    { "when": { "facing": "down"  }, "apply": { "model": "chemecraft:block/pipe_core_down" } },
+
+    { "when": { "north": true }, "apply": { "model": "chemecraft:block/pipe_arm" } },
+    { "when": { "east":  true }, "apply": { "model": "chemecraft:block/pipe_arm", "y": 90 } },
+    { "when": { "south": true }, "apply": { "model": "chemecraft:block/pipe_arm", "y": 180 } },
+    { "when": { "west":  true }, "apply": { "model": "chemecraft:block/pipe_arm", "y": 270 } },
+    { "when": { "up":    true }, "apply": { "model": "chemecraft:block/pipe_arm_up" } },
+    { "when": { "down":  true }, "apply": { "model": "chemecraft:block/pipe_arm_down" } }
+  ]
+}

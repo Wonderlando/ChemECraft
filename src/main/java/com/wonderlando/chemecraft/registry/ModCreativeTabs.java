@@ -23,6 +23,7 @@ public final class ModCreativeTabs {
                     .icon(() -> ModItems.BATCH_REACTOR_ITEM.get().getDefaultInstance())
                     .displayItems((parameters, output) -> {
                         output.accept(ModItems.BATCH_REACTOR_ITEM.get());
+                        output.accept(ModItems.PIPE_ITEM.get());
                     })
                     .build());
 

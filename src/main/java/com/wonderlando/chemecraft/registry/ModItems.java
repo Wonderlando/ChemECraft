@@ -14,6 +14,9 @@ public final class ModItems {
     public static final DeferredItem<BlockItem> BATCH_REACTOR_ITEM =
             ITEMS.registerSimpleBlockItem("batch_reactor", ModBlocks.BATCH_REACTOR);
 
+    public static final DeferredItem<BlockItem> PIPE_ITEM =
+            ITEMS.registerSimpleBlockItem("pipe", ModBlocks.PIPE);
+
     private ModItems() {}
 
     public static void register(IEventBus modEventBus) {

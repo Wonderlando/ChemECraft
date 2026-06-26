@@ -3,6 +3,7 @@ package com.wonderlando.chemecraft.registry;
 import com.wonderlando.chemecraft.ChemECraft;
 import com.wonderlando.chemecraft.block.BatchReactorBlock;
 import com.wonderlando.chemecraft.block.BatchReactorCasingBlock;
+import com.wonderlando.chemecraft.block.PipeBlock;
 
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.material.MapColor;
@@ -24,6 +25,11 @@ public final class ModBlocks {
     public static final DeferredBlock<BatchReactorCasingBlock> BATCH_REACTOR_CASING = BLOCKS.registerBlock("batch_reactor_casing",
             BatchReactorCasingBlock::new,
             p -> p.mapColor(MapColor.METAL).strength(3.5f).sound(SoundType.METAL));
+
+    // A thin fluid pipe (#696865). Not a full cube, connects to pipes/reactors, with a flow-direction arrow.
+    public static final DeferredBlock<PipeBlock> PIPE = BLOCKS.registerBlock("pipe",
+            PipeBlock::new,
+            p -> p.mapColor(MapColor.STONE).strength(1.5f).sound(SoundType.METAL).noOcclusion());
 
     private ModBlocks() {}
 

@@ -1,0 +1,16 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": { "pipe": "chemecraft:block/pipe", "arrow": "chemecraft:block/pipe_arrow", "particle": "chemecraft:block/pipe" },
+  "elements": [
+    { "from": [4, 4, 4], "to": [12, 12, 12],
+      "faces": {
+        "north": { "uv": [0, 0, 16, 16], "texture": "#arrow" },
+        "south": { "uv": [0, 0, 16, 16], "texture": "#arrow" },
+        "west":  { "uv": [0, 0, 16, 16], "texture": "#arrow" },
+        "east":  { "uv": [0, 0, 16, 16], "texture": "#arrow" },
+        "up":    { "uv": [4, 4, 12, 12], "texture": "#pipe" },
+        "down":  { "uv": [4, 4, 12, 12], "texture": "#pipe" }
+      }
+    }
+  ]
+}
