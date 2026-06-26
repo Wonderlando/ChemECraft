@@ -6,42 +6,75 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * A chemical reaction: reactant/product stoichiometry plus a rate constant. The default {@link #rate}
- * is mass-action ({@code k * product([reactant]^coeff)}); subclasses define a specific reaction by
- * supplying their stoichiometry, and may override {@link #rate} for non-mass-action kinetics
- * (e.g. saturation or temperature-dependent rate laws).
+ * A (optionally reversible) chemical reaction: reactant/product stoichiometry plus a forward and a reverse
+ * rate constant. The mass-action forward and reverse rates are
+ * {@code kf * product([reactant]^coeff)} and {@code kr * product([product]^coeff)}; the {@link #rate} that
+ * drives the integrator is the NET rate {@code forward - reverse}, so a reaction with a non-zero reverse
+ * constant relaxes toward chemical equilibrium (net rate -> 0) instead of running to completion, and can
+ * even run backwards when products dominate.
  *
- * <p>To add a new reaction, subclass this and pass the stoichiometry to {@code super(...)}.
+ * <p>A reaction with {@code kr == 0} is irreversible and behaves exactly as a one-way mass-action reaction.
+ *
+ * <p>To add a new reaction, subclass this and pass the stoichiometry (and rate constants) to {@code super}.
+ * Override {@link #rate}/{@link #forwardRate}/{@link #reverseRate} for non-mass-action or
+ * temperature-dependent kinetics.
  */
 public abstract class Reaction {
     private final Map<Species, Integer> reactants;
     private final Map<Species, Integer> products;
-    private final double rateConstant;
+    private final double forwardRateConstant;
+    private final double reverseRateConstant;
 
-    protected Reaction(Map<Species, Integer> reactants, Map<Species, Integer> products, double rateConstant) {
-        this.reactants = Map.copyOf(reactants);
-        this.products = Map.copyOf(products);
-        this.rateConstant = rateConstant;
+    /** Irreversible reaction (reverse rate constant = 0). */
+    protected Reaction(Map<Species, Integer> reactants, Map<Species, Integer> products, double forwardRateConstant) {
+        this(reactants, products, forwardRateConstant, 0.0);
     }
 
-    /** Reaction rate from molar concentrations (indexed by {@link Species#ordinal()}). Mass-action by default. */
+    /** Reversible reaction with distinct forward and reverse rate constants. */
+    protected Reaction(Map<Species, Integer> reactants, Map<Species, Integer> products,
+                       double forwardRateConstant, double reverseRateConstant) {
+        this.reactants = Map.copyOf(reactants);
+        this.products = Map.copyOf(products);
+        this.forwardRateConstant = forwardRateConstant;
+        this.reverseRateConstant = reverseRateConstant;
+    }
+
+    /** Forward (left-to-right) mass-action rate from molar concentrations (indexed by {@link Species#ordinal()}). */
+    public double forwardRate(double[] concentration) {
+        return massAction(forwardRateConstant, reactants, concentration);
+    }
+
+    /** Reverse (right-to-left) mass-action rate; zero for an irreversible reaction. */
+    public double reverseRate(double[] concentration) {
+        if (reverseRateConstant == 0.0) {
+            return 0.0;
+        }
+        return massAction(reverseRateConstant, products, concentration);
+    }
+
+    /** Net reaction rate (forward - reverse). Positive runs the reaction forward, negative runs it backward. */
     public double rate(double[] concentration) {
+        return forwardRate(concentration) - reverseRate(concentration);
+    }
+
+    private static double massAction(double rateConstant, Map<Species, Integer> terms, double[] concentration) {
         double r = rateConstant;
-        for (Map.Entry<Species, Integer> term : reactants.entrySet()) {
+        for (Map.Entry<Species, Integer> term : terms.entrySet()) {
             r *= Math.pow(concentration[term.getKey().ordinal()], term.getValue());
         }
         return r;
     }
 
-    /** Net stoichiometric coefficient for a species (negative = consumed, positive = produced). */
+    /** Net stoichiometric coefficient for a species (negative = consumed, positive = produced) in the forward direction. */
     public double net(Species species) {
         return products.getOrDefault(species, 0) - reactants.getOrDefault(species, 0);
     }
 
     /**
      * Advance molar {@code amounts} (indexed by {@link Species#ordinal()}) by one forward-Euler step of
-     * {@code dtDays} under this reaction: the rate is evaluated at the current concentrations
-     * (amount / volume) and applied through the net stoichiometry, with amounts clamped non-negative.
+     * {@code dtDays} under this reaction: the NET rate is evaluated at the current concentrations
+     * (amount / volume) and applied through the net stoichiometry, with amounts clamped non-negative. A
+     * negative net rate runs the reaction in reverse (consuming products, regenerating reactants).
      * (For several simultaneous reactions in one vessel, evaluate all rates first, then apply.)
      */
     public void step(double[] amounts, double volumeL, double dtDays) {
@@ -53,7 +86,7 @@ public abstract class Reaction {
             concentration[i] = amounts[i] / volumeL;
         }
         double r = rate(concentration);
-        if (r <= 0.0) {
+        if (r == 0.0) {
             return;
         }
         for (Species species : Species.values()) {
@@ -74,8 +107,17 @@ public abstract class Reaction {
         return Set.of();
     }
 
-    public double rateConstant() {
-        return rateConstant;
+    public double forwardRateConstant() {
+        return forwardRateConstant;
+    }
+
+    public double reverseRateConstant() {
+        return reverseRateConstant;
+    }
+
+    /** True when this reaction has a non-zero reverse rate constant (it relaxes toward equilibrium). */
+    public boolean isReversible() {
+        return reverseRateConstant != 0.0;
     }
 
     public Map<Species, Integer> reactants() {
@@ -91,9 +133,14 @@ public abstract class Reaction {
         return getClass().getSimpleName();
     }
 
+    /** The arrow used in the equation: a double harpoon for reversible reactions, a single arrow otherwise. */
+    public String arrow() {
+        return isReversible() ? "⇌" : "→";
+    }
+
     /** The stoichiometric equation as text, e.g. "Substrate + Biomass -> 2 Biomass + 2 Ethanol + 2 CO2". */
     public String equation() {
-        return formatSide(reactants) + " -> " + formatSide(products);
+        return formatSide(reactants) + " " + arrow() + " " + formatSide(products);
     }
 
     private static String formatSide(Map<Species, Integer> terms) {

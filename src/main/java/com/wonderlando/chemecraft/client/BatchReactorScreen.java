@@ -255,7 +255,7 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
     private static Component equationComponent(Reaction reaction) {
         MutableComponent c = Component.empty();
         appendSide(c, reaction.reactants());
-        c.append(Component.literal("  →  ").withColor(NEUTRAL));
+        c.append(Component.literal("  " + reaction.arrow() + "  ").withColor(NEUTRAL));
         appendSide(c, reaction.products());
         return c;
     }

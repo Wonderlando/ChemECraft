@@ -272,8 +272,9 @@ public class BatchReactorBlockEntity extends BlockEntity implements MenuProvider
             seeded = true;
         }
 
-        // Nothing to do if the selected reaction can't currently proceed (its reactants are absent).
-        if (reaction.rate(concentrations(volumeL)) <= 0.0) {
+        // Nothing to do if the selected reaction is at equilibrium / can't proceed in either direction.
+        // (Net rate may be negative for a reversible reaction running backwards, so test for zero, not <= 0.)
+        if (reaction.rate(concentrations(volumeL)) == 0.0) {
             if (seeded) {
                 setChanged();
             }
