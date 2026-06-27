@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "chemecraft:block/batch_reactor" },
+    "facing=east":  { "model": "chemecraft:block/batch_reactor" },
+    "facing=south": { "model": "chemecraft:block/batch_reactor" },
+    "facing=west":  { "model": "chemecraft:block/batch_reactor" }
+  }
+}
