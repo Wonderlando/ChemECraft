@@ -24,6 +24,8 @@ public final class ModCreativeTabs {
                     .displayItems((parameters, output) -> {
                         output.accept(ModItems.BATCH_REACTOR_ITEM.get());
                         output.accept(ModItems.PIPE_ITEM.get());
+                        output.accept(ModItems.SPLITTER_ITEM.get());
+                        output.accept(ModItems.MIXER_ITEM.get());
                         output.accept(ModItems.WRENCH.get());
                     })
                     .build());

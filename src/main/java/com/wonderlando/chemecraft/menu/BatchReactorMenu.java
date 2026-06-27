@@ -20,6 +20,8 @@ import net.minecraft.world.level.Level;
 public class BatchReactorMenu extends AbstractContainerMenu {
     /** clickMenuButton id for the "empty the reactor" action (kept out of the reaction-index range). */
     public static final int BUTTON_EMPTY = 100;
+    /** clickMenuButton id for the "release contents through the outlet" toggle. */
+    public static final int BUTTON_RELEASE = 101;
 
     private final ContainerData data;
     private final Level level;
@@ -69,6 +71,8 @@ public class BatchReactorMenu extends AbstractContainerMenu {
         if (level.getBlockEntity(pos) instanceof BatchReactorBlockEntity reactor) {
             if (id == BUTTON_EMPTY) {
                 reactor.empty();
+            } else if (id == BUTTON_RELEASE) {
+                reactor.toggleRelease();
             } else {
                 reactor.selectReaction(id);
             }

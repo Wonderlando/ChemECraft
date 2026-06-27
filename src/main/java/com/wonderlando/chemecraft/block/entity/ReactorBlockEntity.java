@@ -1,6 +1,7 @@
 package com.wonderlando.chemecraft.block.entity;
 
 import com.wonderlando.chemecraft.Config;
+import com.wonderlando.chemecraft.block.FluidTransport;
 import com.wonderlando.chemecraft.reaction.Reaction;
 import com.wonderlando.chemecraft.reaction.ReactionRegistry;
 import com.wonderlando.chemecraft.reaction.Species;
@@ -9,6 +10,7 @@ import com.wonderlando.chemecraft.registry.ModFluids;
 import java.util.Arrays;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
@@ -24,6 +26,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.storage.ValueInput;
@@ -60,6 +63,13 @@ public abstract class ReactorBlockEntity extends BlockEntity implements MenuProv
     private long lastGameTime = Long.MIN_VALUE;
     // The reaction the user selected for this reactor (ASPEN-style); NONE = idle until one is picked.
     private int selectedReaction = ReactionRegistry.NONE;
+
+    // Outlet release: while true, push the well-mixed contents out through the outlet pipe each tick.
+    private boolean releasing = false;
+    // Recomputed each server tick (synced to the GUI): is a downstream reactor inlet reachable right now?
+    private boolean outletHasDestination = false;
+    // Sub-millibucket remainder carried between ticks so the fixed flow rate stays accurate.
+    private double releaseCarryMb = 0.0;
 
     private final int capacityMb;
     private final FluidStacksResourceHandler tank;
@@ -348,6 +358,177 @@ public abstract class ReactorBlockEntity extends BlockEntity implements MenuProv
         }
     }
 
+    // ---- Fluid transport (outlet release) ----
+
+    public boolean isReleasing() {
+        return releasing;
+    }
+
+    /** Whether a downstream reactor inlet is currently reachable through the outlet pipe (synced to the GUI). */
+    public boolean hasOutletDestination() {
+        return outletHasDestination;
+    }
+
+    /** Toggle the outlet release. Starts only if a valid downstream reactor inlet is reachable right now. */
+    public void toggleRelease() {
+        if (level == null || level.isClientSide()) {
+            return;
+        }
+        if (releasing) {
+            releasing = false;
+        } else if (findOutletDestination(level) != null) {
+            releasing = true;
+        } else {
+            return; // refuse: nothing to release into
+        }
+        releaseCarryMb = 0.0;
+        setChanged();
+        sync();
+    }
+
+    /** Per tick: refresh the destination flag and, while releasing, push one tick's worth of the mixture. */
+    public void tickTransport(Level level) {
+        if (level.isClientSide()) {
+            return;
+        }
+        ReactorBlockEntity destination = findOutletDestination(level);
+        boolean has = destination != null;
+        if (has != outletHasDestination) {
+            outletHasDestination = has;
+            setChanged();
+        }
+        if (!releasing) {
+            return;
+        }
+        if (destination == null || totalFluidMb() <= 0) {
+            releasing = false;
+            setChanged();
+            sync();
+            return;
+        }
+        // Flow uses the same model clock as the kinetics: L/model-day * model-days/tick * 1000 mB/L = mB/tick.
+        double ratePerTick = Config.REACTOR_PIPE_TRANSFER_L_PER_DAY.get()
+                * Config.REACTION_MODEL_DAYS_PER_TICK.get() * 1000.0;
+        releaseCarryMb += ratePerTick;
+        int budget = (int) Math.floor(releaseCarryMb);
+        releaseCarryMb -= budget;
+        if (budget > 0) {
+            transferMixtureTo(destination, budget);
+        }
+        if (totalFluidMb() <= 0) {
+            releasing = false;
+            setChanged();
+            sync();
+        }
+    }
+
+    /** Trace the outlet pipe run (from the outlet port's front face) to a downstream reactor inlet, or null. */
+    private ReactorBlockEntity findOutletDestination(Level level) {
+        BlockState state = getBlockState();
+        if (!state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
+            return null;
+        }
+        return FluidTransport.traceToInlet(level, outletCell(), outletFace(), this);
+    }
+
+    /** The cell hosting this reactor's outlet port. Batch layout: bottom-centre of the right side face. */
+    protected BlockPos outletCell() {
+        Direction back = getBlockState().getValue(BlockStateProperties.HORIZONTAL_FACING);
+        return getBlockPos().relative(back).relative(back.getClockWise());
+    }
+
+    /** The direction this reactor's outlet port points (outward). Batch layout: the right side. */
+    protected Direction outletFace() {
+        return getBlockState().getValue(BlockStateProperties.HORIZONTAL_FACING).getClockWise();
+    }
+
+    /**
+     * Move up to {@code maxVolumeMb} of the well-mixed contents into {@code dest}, scaling every fluid AND
+     * every dissolved species by the SAME fraction, so this reactor's composition (every concentration) is
+     * unchanged as it drains. Returns the millibuckets of fluid actually transferred.
+     */
+    public int transferMixtureTo(ReactorBlockEntity dest, double maxVolumeMb) {
+        int sourceVolume = totalFluidMb();
+        if (sourceVolume <= 0 || maxVolumeMb <= 0.0) {
+            return 0;
+        }
+        int destVolumeBefore = dest.totalFluidMb();
+        int destFree = dest.capacityMb() - destVolumeBefore;
+        if (destFree <= 0) {
+            return 0;
+        }
+        int target = (int) Math.floor(Math.min(maxVolumeMb, Math.min(sourceVolume, destFree)));
+        if (target <= 0) {
+            return 0;
+        }
+        double fraction = (double) target / sourceVolume;
+        double sourceTemp = temperatureK;
+
+        // Dissolved species first: emptying a fluid slot would otherwise auto-clear amounts (onContentsChanged).
+        for (Species species : Species.values()) {
+            if (species.gas()) {
+                continue;
+            }
+            double delta = amounts[species.ordinal()] * fraction;
+            if (delta <= 0.0) {
+                continue;
+            }
+            amounts[species.ordinal()] -= delta;
+            dest.amounts[species.ordinal()] += delta;
+        }
+
+        // Then the fluids, by the same fraction.
+        int movedFluid = 0;
+        for (int i = 0; i < tank.size(); i++) {
+            FluidResource resource = tank.getResource(i);
+            if (resource.isEmpty()) {
+                continue;
+            }
+            int amount = tank.getAmountAsInt(i);
+            int want = Math.min(amount, (int) Math.round(amount * fraction));
+            if (want <= 0) {
+                continue;
+            }
+            int accepted = dest.addFluid(resource, want);
+            if (accepted <= 0) {
+                continue;
+            }
+            tank.set(i, accepted >= amount ? FluidResource.EMPTY : resource, amount - accepted);
+            movedFluid += accepted;
+        }
+
+        // Volume-weighted temperature blend into the destination's bulk.
+        if (movedFluid > 0 && destVolumeBefore + movedFluid > 0) {
+            dest.temperatureK = (destVolumeBefore * dest.temperatureK + movedFluid * sourceTemp)
+                    / (destVolumeBefore + movedFluid);
+        }
+        setChanged();
+        dest.setChanged();
+        return movedFluid;
+    }
+
+    /** Insert up to {@code mb} of {@code resource} into the vessel; returns how much was accepted. */
+    protected int addFluid(FluidResource resource, int mb) {
+        if (resource.isEmpty() || mb <= 0) {
+            return 0;
+        }
+        int slot = slotFor(resource.getFluid());
+        if (slot < 0) {
+            slot = firstEmptySlot();
+        }
+        if (slot < 0) {
+            return 0;
+        }
+        int current = tank.getResource(slot).isEmpty() ? 0 : tank.getAmountAsInt(slot);
+        int space = capacityMb - (totalFluidMb() - current);
+        int add = Math.min(mb, space);
+        if (add <= 0) {
+            return 0;
+        }
+        tank.set(slot, resource, current + add);
+        return add;
+    }
+
     /** The fluid a species materializes as when it is a liquid product (null = it stays dissolved). */
     protected static Fluid fluidFor(Species species) {
         return species == Species.ETHANOL ? ModFluids.ETHANOL.get() : null;
@@ -420,6 +601,7 @@ public abstract class ReactorBlockEntity extends BlockEntity implements MenuProv
         output.putLong("lastGameTime", lastGameTime);
         output.putInt("selectedReaction", selectedReaction);
         output.putDouble("temperatureK", temperatureK);
+        output.putBoolean("releasing", releasing);
     }
 
     @Override
@@ -435,6 +617,7 @@ public abstract class ReactorBlockEntity extends BlockEntity implements MenuProv
         lastGameTime = input.getLongOr("lastGameTime", Long.MIN_VALUE);
         selectedReaction = input.getIntOr("selectedReaction", ReactionRegistry.NONE);
         temperatureK = input.getDoubleOr("temperatureK", Config.REACTOR_AMBIENT_TEMPERATURE_K.get());
+        releasing = input.getBooleanOr("releasing", false);
     }
 
     @Override

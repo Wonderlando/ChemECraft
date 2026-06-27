@@ -25,10 +25,13 @@ public class ModModelProvider extends ModelProvider {
 
     @Override
     protected void registerModels(BlockModelGenerators blockModels, ItemModelGenerators itemModels) {
-        // cube_column: top/bottom use the *_top texture, sides use *_side. The BlockItem's model is auto-generated.
-        blockModels.createTrivialBlock(ModBlocks.BATCH_REACTOR.get(), TexturedModel.COLUMN);
-        // Casing cells share the same look so the 3x3x3 structure reads as one vessel.
-        blockModels.createTrivialBlock(ModBlocks.BATCH_REACTOR_CASING.get(), TexturedModel.COLUMN);
+        // The reactor controller and casing are HAND-AUTHORED (assets/.../blockstates/batch_reactor*.json): the
+        // controller shows an outlet ring on its front face and the front-top-centre casing shows an inlet ring,
+        // both orientation-dependent. They are excluded from getKnownBlocks below so no blockstate is generated;
+        // the controller's BlockItem model still auto-generates (pointing at the hand-authored block/batch_reactor).
+        // Branch/merge hubs are plain cubes (single texture all faces); item models auto-generate.
+        blockModels.createTrivialBlock(ModBlocks.SPLITTER.get(), TexturedModel.CUBE);
+        blockModels.createTrivialBlock(ModBlocks.MIXER.get(), TexturedModel.CUBE);
         // The pipe's multipart blockstate + models are authored by hand (see assets/.../blockstates/pipe.json);
         // it is excluded from getKnownBlocks below so the generator doesn't expect a generated blockstate. We
         // still register its item model here (pointing at the hand-authored core model) so the auto-generated
@@ -41,6 +44,9 @@ public class ModModelProvider extends ModelProvider {
 
     @Override
     protected Stream<? extends Holder<Block>> getKnownBlocks() {
-        return super.getKnownBlocks().filter(holder -> holder.value() != ModBlocks.PIPE.get());
+        return super.getKnownBlocks().filter(holder ->
+                holder.value() != ModBlocks.PIPE.get()
+                        && holder.value() != ModBlocks.BATCH_REACTOR.get()
+                        && holder.value() != ModBlocks.BATCH_REACTOR_CASING.get());
     }
 }

@@ -3,8 +3,6 @@ package com.wonderlando.chemecraft.block;
 import java.util.EnumMap;
 import java.util.Map;
 
-import com.wonderlando.chemecraft.block.entity.ReactorBlockEntity;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
@@ -192,7 +190,59 @@ public class PipeBlock extends Block {
         if (neighbor.getBlock() instanceof PipeBlock) {
             return portCount(neighbor) < MAX_PORTS && !isParallel(facing, neighbor.getValue(FACING), dir);
         }
-        return level.getBlockEntity(neighborPos) instanceof ReactorBlockEntity;
+        if (neighbor.getBlock() instanceof PipeConnectable) {
+            return true; // mixers/splitters accept a connection on any face — that's where runs branch/merge
+        }
+        // Reactors only connect at a port: the controller's front (outlet) or the cell above it (inlet).
+        return FluidTransport.isReactorPort(level, neighborPos, dir.getOpposite());
+    }
+
+    /**
+     * For pipe-run tracing: the OTHER active port of this pipe given the face we entered through, or null if
+     * we did not actually enter through a port or there is no single continuing port.
+     */
+    public static Direction otherPort(BlockState state, Direction entryFace) {
+        if (!(state.getBlock() instanceof PipeBlock) || !state.getValue(PORT.get(entryFace))) {
+            return null;
+        }
+        Direction other = null;
+        for (Map.Entry<Direction, BooleanProperty> entry : PORT.entrySet()) {
+            if (entry.getKey() != entryFace && state.getValue(entry.getValue())) {
+                if (other != null) {
+                    return null; // more than one other port (should not happen with MAX_PORTS = 2)
+                }
+                other = entry.getKey();
+            }
+        }
+        return other;
+    }
+
+    /**
+     * Grow a connection on the pipe at {@code pipePos} toward {@code face} (e.g. an adjacent hub that was
+     * just placed next to it), if that pipe still has a free port. A no-op for non-pipe blocks.
+     */
+    public static void connect(Level level, BlockPos pipePos, Direction face) {
+        BlockState state = level.getBlockState(pipePos);
+        if (!(state.getBlock() instanceof PipeBlock)) {
+            return;
+        }
+        BooleanProperty port = PORT.get(face);
+        if (state.getValue(port) || portCount(state) >= MAX_PORTS) {
+            return;
+        }
+        level.setBlock(pipePos, state.setValue(port, true), Block.UPDATE_ALL);
+    }
+
+    /** Drop the pipe's connection on {@code face} (e.g. when the adjacent hub it pointed at is removed). */
+    public static void disconnect(Level level, BlockPos pipePos, Direction face) {
+        BlockState state = level.getBlockState(pipePos);
+        if (!(state.getBlock() instanceof PipeBlock)) {
+            return;
+        }
+        BooleanProperty port = PORT.get(face);
+        if (state.getValue(port)) {
+            level.setBlock(pipePos, state.setValue(port, false), Block.UPDATE_ALL);
+        }
     }
 
     /** Two pipes are parallel (and must not connect) when they share a flow axis but are offset across it. */

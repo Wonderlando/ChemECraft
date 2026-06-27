@@ -29,7 +29,7 @@ public class BatchReactorBlockEntity extends ReactorBlockEntity {
     /** Fermentable substrate added per wheat item, in grams. */
     public static final double SUBSTRATE_PER_WHEAT_G = 50.0;
     /** Number of synced display values exposed to the GUI. */
-    public static final int DISPLAY_SLOTS = 8;
+    public static final int DISPLAY_SLOTS = 10;
 
     public BatchReactorBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.BATCH_REACTOR.get(), pos, state, FLUID_SLOTS, CAPACITY_MB);
@@ -37,6 +37,7 @@ public class BatchReactorBlockEntity extends ReactorBlockEntity {
 
     public static void serverTick(Level level, BlockPos pos, BlockState state, BatchReactorBlockEntity be) {
         be.simulate(level);
+        be.tickTransport(level);
     }
 
     @Override
@@ -55,6 +56,8 @@ public class BatchReactorBlockEntity extends ReactorBlockEntity {
             case 5 -> (int) Math.round(amounts[Species.ACETIC_ACID.ordinal()] * 1000.0);
             case 6 -> getSelectedReaction();
             case 7 -> (int) Math.round(temperatureK * 10.0); // deci-kelvin (0.1 K precision)
+            case 8 -> isReleasing() ? 1 : 0;
+            case 9 -> hasOutletDestination() ? 1 : 0;
             default -> 0;
         };
     }

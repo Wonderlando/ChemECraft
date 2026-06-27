@@ -36,6 +36,8 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
     private static final int SLOT_ACETIC_MMOL = 5;
     private static final int SLOT_SELECTED = 6;
     private static final int SLOT_TEMP_DK = 7; // temperature in deci-kelvin (0.1 K)
+    private static final int SLOT_RELEASING = 8;  // 1 while the outlet is actively releasing
+    private static final int SLOT_HAS_DEST = 9;   // 1 when a downstream reactor inlet is reachable
 
     private static final int IMAGE_W = 380;
     private static final int IMAGE_H = 220;
@@ -68,6 +70,7 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
 
     private Button selector;
     private Button plotToggle;
+    private Button releaseButton;
     private boolean showRate = false;
 
     // Rolling history (newest sample at index HISTORY-1).
@@ -91,10 +94,17 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
         }).bounds(leftPos + CONTENT_X, topPos + 22, CONTENT_W, 18).build();
         addRenderableWidget(selector);
 
-        // Empty/reset button: discards all contents (always available).
-        Button emptyButton = Button.builder(Component.literal("Empty Reactor"), b ->
+        // Bottom row, split in two: Release (push contents to a piped reactor) on the left, Empty on the right.
+        int rowY = topPos + IMAGE_H - 26;
+        int halfW = (CONTENT_W - 4) / 2;
+        releaseButton = Button.builder(Component.literal("Release"), b ->
+                this.minecraft.gameMode.handleInventoryButtonClick(this.menu.containerId, BatchReactorMenu.BUTTON_RELEASE))
+                .bounds(leftPos + CONTENT_X, rowY, halfW, 18).build();
+        addRenderableWidget(releaseButton);
+
+        Button emptyButton = Button.builder(Component.literal("Empty"), b ->
                 this.minecraft.gameMode.handleInventoryButtonClick(this.menu.containerId, BatchReactorMenu.BUTTON_EMPTY))
-                .bounds(leftPos + CONTENT_X, topPos + IMAGE_H - 26, CONTENT_W, 18).build();
+                .bounds(leftPos + CONTENT_X + halfW + 4, rowY, CONTENT_W - halfW - 4, 18).build();
         addRenderableWidget(emptyButton);
 
         // Plot mode toggle (client-only display state).
@@ -160,6 +170,12 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
                 : " (locked - empty to change)";
         selector.setMessage(Component.literal("Reaction: " + reactionName + hint));
         plotToggle.setMessage(Component.literal(showRate ? "Show: Rate" : "Show: Concentrations"));
+
+        boolean releasing = menu.value(SLOT_RELEASING) == 1;
+        boolean hasDest = menu.value(SLOT_HAS_DEST) == 1;
+        releaseButton.active = releasing || hasDest; // can always stop; can only start with a destination
+        releaseButton.setMessage(Component.literal(
+                releasing ? "Stop Release" : (hasDest ? "Release" : "No Outlet")));
 
         graphics.text(f, this.title, x, top + 8, TITLE, true);
 

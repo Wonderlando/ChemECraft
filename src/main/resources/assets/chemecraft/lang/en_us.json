@@ -3,6 +3,8 @@
   "block.chemecraft.batch_reactor": "Batch Reactor",
   "block.chemecraft.batch_reactor_casing": "Batch Reactor Casing",
   "block.chemecraft.pipe": "Pipe",
+  "block.chemecraft.splitter": "Splitter",
+  "block.chemecraft.mixer": "Mixer",
   "item.chemecraft.wrench": "Wrench",
   "fluid.chemecraft.ethanol": "Ethanol",
 

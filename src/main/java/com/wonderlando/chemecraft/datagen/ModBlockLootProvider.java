@@ -19,6 +19,8 @@ public class ModBlockLootProvider extends BlockLootSubProvider {
     protected void generate() {
         dropSelf(ModBlocks.BATCH_REACTOR.get());
         dropSelf(ModBlocks.PIPE.get());
+        dropSelf(ModBlocks.SPLITTER.get());
+        dropSelf(ModBlocks.MIXER.get());
         // Casing cells drop nothing: the single reactor item comes from the controller when the structure breaks.
         add(ModBlocks.BATCH_REACTOR_CASING.get(), noDrop());
     }

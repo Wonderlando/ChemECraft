@@ -18,6 +18,12 @@ public final class ModItems {
     public static final DeferredItem<BlockItem> PIPE_ITEM =
             ITEMS.registerSimpleBlockItem("pipe", ModBlocks.PIPE);
 
+    public static final DeferredItem<BlockItem> SPLITTER_ITEM =
+            ITEMS.registerSimpleBlockItem("splitter", ModBlocks.SPLITTER);
+
+    public static final DeferredItem<BlockItem> MIXER_ITEM =
+            ITEMS.registerSimpleBlockItem("mixer", ModBlocks.MIXER);
+
     // A wrench: right-click a pipe to rotate its flow direction; sneak-right-click a face to toggle a connection.
     public static final DeferredItem<WrenchItem> WRENCH =
             ITEMS.registerItem("wrench", WrenchItem::new, props -> props.stacksTo(1));

@@ -3,7 +3,9 @@ package com.wonderlando.chemecraft.registry;
 import com.wonderlando.chemecraft.ChemECraft;
 import com.wonderlando.chemecraft.block.BatchReactorBlock;
 import com.wonderlando.chemecraft.block.BatchReactorCasingBlock;
+import com.wonderlando.chemecraft.block.MixerBlock;
 import com.wonderlando.chemecraft.block.PipeBlock;
+import com.wonderlando.chemecraft.block.SplitterBlock;
 
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.material.MapColor;
@@ -30,6 +32,15 @@ public final class ModBlocks {
     public static final DeferredBlock<PipeBlock> PIPE = BLOCKS.registerBlock("pipe",
             PipeBlock::new,
             p -> p.mapColor(MapColor.STONE).strength(1.5f).sound(SoundType.METAL).noOcclusion());
+
+    // Branch/merge hubs: solid machine cubes pipes plug into. A splitter fans one run out; a mixer joins many.
+    public static final DeferredBlock<SplitterBlock> SPLITTER = BLOCKS.registerBlock("splitter",
+            SplitterBlock::new,
+            p -> p.mapColor(MapColor.METAL).strength(2.5f).sound(SoundType.METAL));
+
+    public static final DeferredBlock<MixerBlock> MIXER = BLOCKS.registerBlock("mixer",
+            MixerBlock::new,
+            p -> p.mapColor(MapColor.METAL).strength(2.5f).sound(SoundType.METAL));
 
     private ModBlocks() {}
 

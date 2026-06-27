@@ -102,6 +102,17 @@ public class BatchReactorBlock extends Block implements EntityBlock {
                     level.setBlock(cell, casing, Block.UPDATE_ALL);
                 }
             });
+            // Ports sit on the SIDE faces, centred in depth: inlet on the LEFT face (top), outlet on the RIGHT
+            // face (bottom). Each cell stores the direction its port points so the marker faces outward.
+            Direction right = back.getClockWise();
+            Direction left = right.getOpposite();
+            BlockPos inlet = pos.relative(back).relative(left).above(2);  // top-centre of the left face
+            BlockPos outlet = pos.relative(back).relative(right);         // bottom-centre of the right face
+            markPort(level, inlet, BatchReactorCasingBlock.PortType.INLET, left);
+            markPort(level, outlet, BatchReactorCasingBlock.PortType.OUTLET, right);
+            // Hook up any pipe already sitting against either port's outward face.
+            PipeBlock.connect(level, inlet.relative(left), left.getOpposite());
+            PipeBlock.connect(level, outlet.relative(right), right.getOpposite());
         }
     }
 
@@ -114,6 +125,19 @@ public class BatchReactorBlock extends Block implements EntityBlock {
                 level.removeBlock(cell, false);
             }
         });
+        // Release any pipe arms that were pointing at our ports.
+        Direction front = back.getOpposite();
+        PipeBlock.disconnect(level, pos.relative(front), front.getOpposite());
+        PipeBlock.disconnect(level, pos.above(HEIGHT - 1).relative(front), front.getOpposite());
+    }
+
+    /** Tag a casing cell as an inlet/outlet port whose ring faces outward in {@code face}. */
+    private static void markPort(Level level, BlockPos cell, BatchReactorCasingBlock.PortType port, Direction face) {
+        if (level.getBlockState(cell).getBlock() instanceof BatchReactorCasingBlock) {
+            level.setBlock(cell, ModBlocks.BATCH_REACTOR_CASING.get().defaultBlockState()
+                    .setValue(BatchReactorCasingBlock.PORT, port)
+                    .setValue(BlockStateProperties.HORIZONTAL_FACING, face), Block.UPDATE_ALL);
+        }
     }
 
     /** True when every casing cell of the region anchored at {@code controller} (extending {@code back}) is replaceable. */
