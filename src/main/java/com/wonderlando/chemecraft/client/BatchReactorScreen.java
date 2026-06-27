@@ -382,6 +382,7 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
         EnumSet<Species> set = EnumSet.noneOf(Species.class);
         set.addAll(reaction.reactants().keySet());
         set.addAll(reaction.products().keySet());
+        set.removeIf(Species::gas); // vented gases (CO2) escape rather than accumulate — don't display them
         return set;
     }
 

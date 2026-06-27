@@ -3,6 +3,7 @@
   "block.chemecraft.batch_reactor": "Batch Reactor",
   "block.chemecraft.batch_reactor_casing": "Batch Reactor Casing",
   "block.chemecraft.pipe": "Pipe",
+  "item.chemecraft.wrench": "Wrench",
   "fluid.chemecraft.ethanol": "Ethanol",
 
   "chemecraft.configuration.title": "ChemECraft Configs",

@@ -7,8 +7,10 @@ import com.wonderlando.chemecraft.block.entity.ReactorBlockEntity;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
@@ -115,6 +117,52 @@ public class PipeBlock extends Block {
                 updated = updated.setValue(FACING, dir.getOpposite());
             }
             level.setBlock(neighborPos, updated, Block.UPDATE_ALL);
+        }
+    }
+
+    /**
+     * Wrench interaction. Plain right-click rotates the flow direction (the arrow); sneak-right-click on a
+     * face toggles the connection (port) on that side, keeping the neighbour pipe's reciprocal port in sync.
+     */
+    public void wrench(Level level, BlockPos pos, BlockState state, Player player, Direction face, boolean sneaking) {
+        if (sneaking) {
+            toggleConnection(level, pos, state, face, player);
+            return;
+        }
+        Direction[] all = Direction.values();
+        Direction next = all[(state.getValue(FACING).ordinal() + 1) % all.length];
+        level.setBlockAndUpdate(pos, state.setValue(FACING, next));
+        tell(player, "Pipe flow: " + next.getName());
+    }
+
+    private void toggleConnection(Level level, BlockPos pos, BlockState state, Direction face, Player player) {
+        BooleanProperty port = PORT.get(face);
+        BooleanProperty back = PORT.get(face.getOpposite());
+        BlockPos neighborPos = pos.relative(face);
+        BlockState neighbor = level.getBlockState(neighborPos);
+        boolean neighborIsPipe = neighbor.getBlock() instanceof PipeBlock;
+        if (state.getValue(port)) {
+            level.setBlockAndUpdate(pos, state.setValue(port, false));
+            if (neighborIsPipe && neighbor.getValue(back)) {
+                level.setBlockAndUpdate(neighborPos, neighbor.setValue(back, false));
+            }
+            tell(player, "Pipe disconnected: " + face.getName());
+        } else {
+            if (portCount(state) >= MAX_PORTS) {
+                tell(player, "Pipe already has an inlet and outlet");
+                return;
+            }
+            level.setBlockAndUpdate(pos, state.setValue(port, true));
+            if (neighborIsPipe && portCount(neighbor) < MAX_PORTS) {
+                level.setBlockAndUpdate(neighborPos, neighbor.setValue(back, true));
+            }
+            tell(player, "Pipe connected: " + face.getName());
+        }
+    }
+
+    private static void tell(Player player, String message) {
+        if (player != null) {
+            player.sendOverlayMessage(Component.literal(message));
         }
     }
 

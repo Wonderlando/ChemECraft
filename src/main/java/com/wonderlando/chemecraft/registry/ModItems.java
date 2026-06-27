@@ -1,6 +1,7 @@
 package com.wonderlando.chemecraft.registry;
 
 import com.wonderlando.chemecraft.ChemECraft;
+import com.wonderlando.chemecraft.item.WrenchItem;
 
 import net.minecraft.world.item.BlockItem;
 import net.neoforged.bus.api.IEventBus;
@@ -16,6 +17,10 @@ public final class ModItems {
 
     public static final DeferredItem<BlockItem> PIPE_ITEM =
             ITEMS.registerSimpleBlockItem("pipe", ModBlocks.PIPE);
+
+    // A wrench: right-click a pipe to rotate its flow direction; sneak-right-click a face to toggle a connection.
+    public static final DeferredItem<WrenchItem> WRENCH =
+            ITEMS.registerItem("wrench", WrenchItem::new, props -> props.stacksTo(1));
 
     private ModItems() {}
 

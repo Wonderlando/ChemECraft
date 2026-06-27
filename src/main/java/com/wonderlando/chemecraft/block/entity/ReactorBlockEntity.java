@@ -10,7 +10,10 @@ import java.util.Arrays;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
@@ -290,9 +293,38 @@ public abstract class ReactorBlockEntity extends BlockEntity implements MenuProv
         if (reacted) {
             updateLiquidProducts();
         }
-        if (reacted || temperatureK != tempBefore) {
+        double vented = ventGases(level);
+        if (reacted || vented > 0.0 || temperatureK != tempBefore) {
             setChanged();
         }
+    }
+
+    /** Release any gas species (e.g. CO2) out of the vessel so they escape instead of accumulating. */
+    private double ventGases(Level level) {
+        double vented = 0.0;
+        for (Species species : Species.values()) {
+            if (species.gas() && amounts[species.ordinal()] > 0.0) {
+                vented += amounts[species.ordinal()];
+                amounts[species.ordinal()] = 0.0;
+            }
+        }
+        if (vented > 1.0e-6 && level instanceof ServerLevel server) {
+            emitVentParticles(server);
+        }
+        return vented;
+    }
+
+    /** A gentle wisp of white smoke at the top of the reactor to show gas venting. */
+    private void emitVentParticles(ServerLevel server) {
+        RandomSource random = server.getRandom();
+        if (random.nextFloat() > 0.5f) {
+            return; // intermittent, so the stream stays light
+        }
+        BlockPos pos = getBlockPos();
+        double x = pos.getX() + 0.5 + (random.nextDouble() - 0.5) * 0.6;
+        double y = pos.getY() + 2.6; // near the top of the 3-tall reactor
+        double z = pos.getZ() + 0.5 + (random.nextDouble() - 0.5) * 0.6;
+        server.sendParticles(ParticleTypes.WHITE_SMOKE, x, y, z, 2, 0.04, 0.02, 0.04, 0.01);
     }
 
     /**

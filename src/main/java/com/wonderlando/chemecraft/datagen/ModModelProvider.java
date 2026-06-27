@@ -5,9 +5,12 @@ import java.util.stream.Stream;
 import com.wonderlando.chemecraft.ChemECraft;
 import com.wonderlando.chemecraft.registry.ModBlocks;
 
+import com.wonderlando.chemecraft.registry.ModItems;
+
 import net.minecraft.client.data.models.BlockModelGenerators;
 import net.minecraft.client.data.models.ItemModelGenerators;
 import net.minecraft.client.data.models.ModelProvider;
+import net.minecraft.client.data.models.model.ModelTemplates;
 import net.minecraft.client.data.models.model.TexturedModel;
 import net.minecraft.core.Holder;
 import net.minecraft.data.PackOutput;
@@ -31,6 +34,9 @@ public class ModModelProvider extends ModelProvider {
         // still register its item model here (pointing at the hand-authored core model) so the auto-generated
         // default — which would point at the non-existent block/pipe — is not emitted.
         blockModels.registerSimpleItemModel(ModBlocks.PIPE.get(), Identifier.parse("chemecraft:block/pipe_core"));
+
+        // The wrench is a standard flat inventory item (textures/item/wrench.png).
+        itemModels.generateFlatItem(ModItems.WRENCH.get(), ModelTemplates.FLAT_ITEM);
     }
 
     @Override
