@@ -4,7 +4,6 @@ import com.wonderlando.chemecraft.reaction.Reaction;
 import com.wonderlando.chemecraft.reaction.Species;
 
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Fermentation as a mass-action reaction (autocatalytic in biomass):
@@ -12,8 +11,8 @@ import java.util.Set;
  * A tunable caricature (not strictly mass-balanced) — adjust the coefficients or {@code k} freely.
  */
 public class Fermentation extends Reaction {
-    /** Tuned so a ~150 g/L batch finishes in ~1 in-game day, L/(mol*day). */
-    public static final double DEFAULT_RATE_CONSTANT = 2;
+    /** Tuned so a ~150 g/L batch finishes in ~1 in-game day, L/(mol·s). */
+    public static final double DEFAULT_RATE_CONSTANT = 2.0 / 86400.0;
     /** Exothermic heat of reaction per mole of extent (one substrate consumed), in joules. */
     public static final double DEFAULT_ENTHALPY = -100_000.0;
     /** Activation energy, J/mol — ~Q10 of 1.9 (rate nearly doubles per +10 K), typical of yeast kinetics. */
@@ -30,11 +29,9 @@ public class Fermentation extends Reaction {
                 rateConstant);
     }
 
-    /** Ethanol leaves the dissolved phase as a real liquid, so it can be separated later (distillation). */
-    @Override
-    public Set<Species> liquidProducts() {
-        return Set.of(Species.ETHANOL);
-    }
+    // Ethanol stays a DISSOLVED species (no separate liquid phase / volume) so the vessel's volume balance is
+    // just water in/out — otherwise the produced ethanol's volume would accumulate in a CSTR. Liquid-liquid
+    // separation (materializing ethanol as its own fluid) will be handled later by a distillation step.
 
     @Override
     public double enthalpy() {

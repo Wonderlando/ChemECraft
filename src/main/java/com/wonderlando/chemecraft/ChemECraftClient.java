@@ -1,6 +1,8 @@
 package com.wonderlando.chemecraft;
 
-import com.wonderlando.chemecraft.client.BatchReactorScreen;
+import com.wonderlando.chemecraft.client.ReactorScreen;
+import com.wonderlando.chemecraft.client.ReservoirScreen;
+import com.wonderlando.chemecraft.client.SinkScreen;
 import com.wonderlando.chemecraft.registry.ModMenus;
 
 import net.minecraft.client.Minecraft;
@@ -35,6 +37,8 @@ public class ChemECraftClient {
 
     @SubscribeEvent
     static void registerScreens(RegisterMenuScreensEvent event) {
-        event.register(ModMenus.BATCH_REACTOR.get(), BatchReactorScreen::new);
+        event.register(ModMenus.REACTOR.get(), ReactorScreen::new);
+        event.register(ModMenus.RESERVOIR.get(), ReservoirScreen::new);
+        event.register(ModMenus.SINK.get(), SinkScreen::new);
     }
 }

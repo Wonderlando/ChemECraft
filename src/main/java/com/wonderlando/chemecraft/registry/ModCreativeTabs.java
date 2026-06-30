@@ -20,12 +20,15 @@ public final class ModCreativeTabs {
             () -> CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.chemecraft")) // title value set in en_us.json
                     .withTabsBefore(CreativeModeTabs.COMBAT)
-                    .icon(() -> ModItems.BATCH_REACTOR_ITEM.get().getDefaultInstance())
+                    .icon(() -> ModItems.CSTR_ITEM.get().getDefaultInstance())
                     .displayItems((parameters, output) -> {
+                        output.accept(ModItems.CSTR_ITEM.get());
                         output.accept(ModItems.BATCH_REACTOR_ITEM.get());
                         output.accept(ModItems.PIPE_ITEM.get());
                         output.accept(ModItems.SPLITTER_ITEM.get());
                         output.accept(ModItems.MIXER_ITEM.get());
+                        output.accept(ModItems.RESERVOIR_ITEM.get());
+                        output.accept(ModItems.SINK_ITEM.get());
                         output.accept(ModItems.WRENCH.get());
                     })
                     .build());

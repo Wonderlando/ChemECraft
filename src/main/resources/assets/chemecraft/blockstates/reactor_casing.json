@@ -1,0 +1,16 @@
+{
+  "variants": {
+    "port=none,facing=north": { "model": "chemecraft:block/reactor_casing" },
+    "port=none,facing=east":  { "model": "chemecraft:block/reactor_casing" },
+    "port=none,facing=south": { "model": "chemecraft:block/reactor_casing" },
+    "port=none,facing=west":  { "model": "chemecraft:block/reactor_casing" },
+    "port=inlet,facing=north": { "model": "chemecraft:block/reactor_casing_inlet", "y": 0 },
+    "port=inlet,facing=east":  { "model": "chemecraft:block/reactor_casing_inlet", "y": 90 },
+    "port=inlet,facing=south": { "model": "chemecraft:block/reactor_casing_inlet", "y": 180 },
+    "port=inlet,facing=west":  { "model": "chemecraft:block/reactor_casing_inlet", "y": 270 },
+    "port=outlet,facing=north": { "model": "chemecraft:block/reactor_casing_outlet", "y": 0 },
+    "port=outlet,facing=east":  { "model": "chemecraft:block/reactor_casing_outlet", "y": 90 },
+    "port=outlet,facing=south": { "model": "chemecraft:block/reactor_casing_outlet", "y": 180 },
+    "port=outlet,facing=west":  { "model": "chemecraft:block/reactor_casing_outlet", "y": 270 }
+  }
+}

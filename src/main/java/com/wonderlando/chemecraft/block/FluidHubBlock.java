@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -43,5 +44,9 @@ public abstract class FluidHubBlock extends Block implements PipeConnectable {
         for (Direction dir : Direction.values()) {
             PipeBlock.disconnect(level, pos.relative(dir), dir.getOpposite());
         }
+    }
+
+    /** Wrench right-click. Default: nothing (no configurable side yet); the mixer overrides to aim its outlet. */
+    public void wrench(Level level, BlockPos pos, BlockState state, Player player, Direction face, boolean sneaking) {
     }
 }

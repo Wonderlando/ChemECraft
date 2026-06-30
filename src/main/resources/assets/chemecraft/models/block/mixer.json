@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "chemecraft:block/mixer",
+    "down": "chemecraft:block/mixer",
+    "up": "chemecraft:block/mixer",
+    "north": "chemecraft:block/mixer_out",
+    "east": "chemecraft:block/mixer",
+    "south": "chemecraft:block/mixer",
+    "west": "chemecraft:block/mixer"
+  }
+}

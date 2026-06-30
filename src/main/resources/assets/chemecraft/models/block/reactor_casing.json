@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/cube_column",
+  "textures": {
+    "end": "chemecraft:block/reactor_casing_top",
+    "side": "chemecraft:block/reactor_casing_side"
+  }
+}

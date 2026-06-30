@@ -2,6 +2,7 @@ package com.wonderlando.chemecraft.reaction;
 
 import com.wonderlando.chemecraft.reaction.reactions.Acetification;
 import com.wonderlando.chemecraft.reaction.reactions.Fermentation;
+import com.wonderlando.chemecraft.reaction.reactions.SimpleAtoB;
 
 import java.util.EnumSet;
 import java.util.List;
@@ -17,7 +18,8 @@ public final class ReactionRegistry {
 
     public static final List<Reaction> AVAILABLE = List.of(
             new Fermentation(),
-            new Acetification());
+            new Acetification(),
+            new SimpleAtoB());
 
     /**
      * Species that any available reaction turns into a free liquid. This is the union over ALL reactions

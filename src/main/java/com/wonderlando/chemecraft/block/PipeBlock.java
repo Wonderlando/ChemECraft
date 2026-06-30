@@ -193,8 +193,8 @@ public class PipeBlock extends Block {
         if (neighbor.getBlock() instanceof PipeConnectable) {
             return true; // mixers/splitters accept a connection on any face — that's where runs branch/merge
         }
-        // Reactors only connect at a port: the controller's front (outlet) or the cell above it (inlet).
-        return FluidTransport.isReactorPort(level, neighborPos, dir.getOpposite());
+        // Reactor ports (inlet/outlet casing) and single-block nodes (reservoir/sink) are connectable.
+        return FluidTransport.isPort(level, neighborPos, dir.getOpposite());
     }
 
     /**

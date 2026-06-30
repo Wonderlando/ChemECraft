@@ -2,10 +2,10 @@ package com.wonderlando.chemecraft.block.entity;
 
 import com.wonderlando.chemecraft.Config;
 import com.wonderlando.chemecraft.block.FluidTransport;
+import com.wonderlando.chemecraft.block.ReactorBlock;
 import com.wonderlando.chemecraft.reaction.Reaction;
 import com.wonderlando.chemecraft.reaction.ReactionRegistry;
 import com.wonderlando.chemecraft.reaction.Species;
-import com.wonderlando.chemecraft.registry.ModFluids;
 
 import java.util.Arrays;
 
@@ -44,16 +44,30 @@ import net.neoforged.neoforge.transfer.fluid.FluidStacksResourceHandler;
  *
  * <p>The integrator computes volume and thermal mass <em>per substep</em> and calls {@link #advect} before
  * each one, so a continuous reactor (e.g. a CSTR) can subclass this and inject convective feed/effluent
- * terms into the FULL transient balances — no steady-state assumption. A {@code BatchReactorBlockEntity}
+ * terms into the FULL transient balances — no steady-state assumption. A {@code TankReactorBlockEntity}
  * is simply a reactor whose {@link #advect} is a no-op.
  */
 public abstract class ReactorBlockEntity extends BlockEntity implements MenuProvider {
     /** Specific heat of water, J/(g*K). Water (1 mB ~= 1 g) is the vessel's thermal mass. */
     protected static final double CP_WATER = 4.184;
 
+    /**
+     * Conversion between the tank's native unit (millibuckets — required by Minecraft's fluid system) and the
+     * model/GUI unit (litres). 1 bucket = 1000 mB = 1 L, so mB is effectively millilitres. EVERYTHING outside
+     * the tank boundary is in litres; this constant is the only place buckets meet litres.
+     */
+    public static final int MB_PER_LITER = 1000;
+
     private static final double SEED_BIOMASS_G_PER_L = 0.5; // auto-seeded yeast inoculum
     private static final int MAX_CATCHUP_SUBSTEPS = 2000;
     private static final double MAX_SUBSTEP_DAYS = 0.05;
+    /**
+     * Target maximum fractional change of any reactant per substep ({@code rate·dt}). The integrator shrinks
+     * the substep so an explicit forward-Euler step stays well within the stability limit (~1) and accurate;
+     * 0.2 means no consumed species drops by more than ~20% in a single step. This is what makes a FAST rate
+     * constant (e.g. kf = 1 s⁻¹) integrate smoothly instead of overshooting to zero in one tick.
+     */
+    private static final double MAX_SUBSTEP_REACTION_FRACTION = 0.2;
 
     /** Reaction state: molar amounts (mol) per species, indexed by {@link Species#ordinal()}. */
     protected final double[] amounts = new double[Species.values().length];
@@ -69,7 +83,9 @@ public abstract class ReactorBlockEntity extends BlockEntity implements MenuProv
     // Recomputed each server tick (synced to the GUI): is a downstream reactor inlet reachable right now?
     private boolean outletHasDestination = false;
     // Sub-millibucket remainder carried between ticks so the fixed flow rate stays accurate.
-    private double releaseCarryMb = 0.0;
+    protected double releaseCarryMb = 0.0;
+    // Millibuckets pushed INTO this node since its last transport tick (a CSTR matches its outlet to this).
+    private int inflowThisTickMb = 0;
 
     private final int capacityMb;
     private final FluidStacksResourceHandler tank;
@@ -261,11 +277,30 @@ public abstract class ReactorBlockEntity extends BlockEntity implements MenuProv
         double ambient = Config.REACTOR_AMBIENT_TEMPERATURE_K.get();
         double coolingK = Config.REACTOR_COOLING_PER_DAY.get();
         double totalModelDays = elapsedTicks * Config.REACTION_MODEL_DAYS_PER_TICK.get();
-        int steps = (int) Math.min(MAX_CATCHUP_SUBSTEPS,
-                Math.max(1L, (long) Math.ceil(totalModelDays / MAX_SUBSTEP_DAYS)));
-        double dtDays = totalModelDays / steps;
 
         Reaction reaction = ReactionRegistry.byIndex(selectedReaction);
+
+        // Substep size: capped both by the catch-up limit and by the reaction's own speed, so a fast rate
+        // constant gets many small steps (no overshoot) while a slow one stays cheap. Evaluated at the current
+        // (start-of-tick) state — the highest concentration, so the most demanding point for a depleting
+        // reaction; the per-step extent clamp in Reaction#step keeps mass balanced if anything still overshoots.
+        double maxSubstepDays = MAX_SUBSTEP_DAYS;
+        double volumeNow = getWaterMb() / (double) MB_PER_LITER;
+        if (reaction != null && volumeNow > 0.0) {
+            double[] conc = new double[amounts.length];
+            for (int i = 0; i < amounts.length; i++) {
+                conc[i] = amounts[i] / volumeNow;
+            }
+            double relRatePerSecond = reaction.fastestRelativeRate(conc, temperatureK);
+            if (relRatePerSecond > 0.0) {
+                double stableDays = (MAX_SUBSTEP_REACTION_FRACTION / relRatePerSecond) / 86400.0;
+                maxSubstepDays = Math.min(maxSubstepDays, stableDays);
+            }
+        }
+        int steps = (int) Math.min(MAX_CATCHUP_SUBSTEPS,
+                Math.max(1L, (long) Math.ceil(totalModelDays / maxSubstepDays)));
+        double dtDays = totalModelDays / steps;
+
         double tempBefore = temperatureK;
         boolean reacted = false;
 
@@ -273,7 +308,7 @@ public abstract class ReactorBlockEntity extends BlockEntity implements MenuProv
             // Convective transport (feed in / effluent out). No-op for a batch reactor; a CSTR overrides it.
             advect(dtDays);
 
-            double volumeL = getWaterMb() / 1000.0;
+            double volumeL = getWaterMb() / (double) MB_PER_LITER;
             if (volumeL <= 0.0) {
                 temperatureK = ambient; // no solvent => no thermal mass; sit at ambient
                 continue;
@@ -391,44 +426,102 @@ public abstract class ReactorBlockEntity extends BlockEntity implements MenuProv
         if (level.isClientSide()) {
             return;
         }
-        ReactorBlockEntity destination = findOutletDestination(level);
-        boolean has = destination != null;
-        if (has != outletHasDestination) {
-            outletHasDestination = has;
-            setChanged();
-        }
+        int inflow = inflowThisTickMb; // millibuckets fed into us since our last transport tick
+        inflowThisTickMb = 0;
+
+        ReactorBlockEntity destination = refreshDestination(level);
         if (!releasing) {
             return;
         }
-        if (destination == null || totalFluidMb() <= 0) {
+        boolean matchInlet = matchesOutletToInlet();
+        // A CSTR keeps releasing while fed (constant holdup); a batch reactor stops once drained.
+        if (destination == null || (!matchInlet && totalFluidMb() <= 0)) {
             releasing = false;
             setChanged();
             sync();
             return;
         }
-        // Flow uses the same model clock as the kinetics: L/model-day * model-days/tick * 1000 mB/L = mB/tick.
-        double ratePerTick = Config.REACTOR_PIPE_TRANSFER_L_PER_DAY.get()
-                * Config.REACTION_MODEL_DAYS_PER_TICK.get() * 1000.0;
-        releaseCarryMb += ratePerTick;
-        int budget = (int) Math.floor(releaseCarryMb);
-        releaseCarryMb -= budget;
+        int budget;
+        if (matchInlet) {
+            // CSTR rule: outlet rate = inlet rate, so the reactor holds a constant volume (steady-state CSTR).
+            budget = inflow;
+        } else {
+            // Batch reactor / reservoir: push at the configured rate.
+            // L/min ÷ 1440 min/day × model-days/tick × mB/L = mB/tick.
+            double ratePerTick = (outletFlowLitersPerMin() / 1440.0)
+                    * Config.REACTION_MODEL_DAYS_PER_TICK.get() * MB_PER_LITER;
+            releaseCarryMb += ratePerTick;
+            budget = (int) Math.floor(releaseCarryMb);
+            releaseCarryMb -= budget;
+        }
         if (budget > 0) {
             transferMixtureTo(destination, budget);
         }
-        if (totalFluidMb() <= 0) {
+        if (!matchInlet && totalFluidMb() <= 0) {
             releasing = false;
             setChanged();
             sync();
         }
     }
 
+    /**
+     * Whether this node keeps a constant holdup by matching its outlet flow to its inlet flow (a CSTR), as
+     * opposed to draining at a fixed configured rate (a batch reactor / reservoir).
+     */
+    protected boolean matchesOutletToInlet() {
+        return getBlockState().getBlock() instanceof ReactorBlock reactor && reactor.hasInlet();
+    }
+
+    /** Recompute whether a downstream inlet is reachable (synced to the GUI) and return that destination. */
+    protected ReactorBlockEntity refreshDestination(Level level) {
+        ReactorBlockEntity destination = findOutletDestination(level);
+        boolean has = destination != null;
+        if (has != outletHasDestination) {
+            outletHasDestination = has;
+            setChanged();
+        }
+        return destination;
+    }
+
+    /**
+     * Inject a feed packet straight into this node — {@code waterMb} of solvent plus {@code feedMoles} of each
+     * species — with no source holdup involved (used by a reservoir, a pure source). If the destination is near
+     * full and can't take all the water, the species are scaled down to match so the fed concentration is kept.
+     * Records the inflow so a CSTR can match its outlet to it.
+     */
+    public void injectFeed(int waterMb, double[] feedMoles) {
+        if (waterMb <= 0) {
+            return;
+        }
+        int before = totalFluidMb();
+        addFluid(FluidResource.of(Fluids.WATER), waterMb);
+        int accepted = totalFluidMb() - before;
+        if (accepted <= 0) {
+            return;
+        }
+        double scale = (double) accepted / waterMb;
+        for (Species species : Species.values()) {
+            if (species.gas()) {
+                continue;
+            }
+            amounts[species.ordinal()] += feedMoles[species.ordinal()] * scale;
+        }
+        inflowThisTickMb += accepted;
+        setChanged();
+    }
+
     /** Trace the outlet pipe run (from the outlet port's front face) to a downstream reactor inlet, or null. */
-    private ReactorBlockEntity findOutletDestination(Level level) {
+    protected ReactorBlockEntity findOutletDestination(Level level) {
         BlockState state = getBlockState();
         if (!state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
             return null;
         }
         return FluidTransport.traceToInlet(level, outletCell(), outletFace(), this);
+    }
+
+    /** Litres per real minute this node pushes out of its outlet. Default = the shared config. */
+    protected double outletFlowLitersPerMin() {
+        return Config.REACTOR_OUTLET_FLOW_L_PER_MIN.get();
     }
 
     /** The cell hosting this reactor's outlet port. Batch layout: bottom-centre of the right side face. */
@@ -502,6 +595,7 @@ public abstract class ReactorBlockEntity extends BlockEntity implements MenuProv
             dest.temperatureK = (destVolumeBefore * dest.temperatureK + movedFluid * sourceTemp)
                     / (destVolumeBefore + movedFluid);
         }
+        dest.inflowThisTickMb += movedFluid; // record at the destination so a CSTR can match outlet to inlet
         setChanged();
         dest.setChanged();
         return movedFluid;
@@ -529,9 +623,13 @@ public abstract class ReactorBlockEntity extends BlockEntity implements MenuProv
         return add;
     }
 
-    /** The fluid a species materializes as when it is a liquid product (null = it stays dissolved). */
+    /**
+     * The fluid a species materializes as when it is a liquid product (null = it stays dissolved). Currently
+     * NOTHING materializes — every species (incl. ethanol) stays dissolved so vessel volume = water only and
+     * the mass/volume balance is clean. A future distillation step will re-enable a separable liquid phase.
+     */
     protected static Fluid fluidFor(Species species) {
-        return species == Species.ETHANOL ? ModFluids.ETHANOL.get() : null;
+        return null;
     }
 
     /** Set the tank's amount (mB) of a product fluid, capped so the shared volume never overflows. */

@@ -1,6 +1,6 @@
 package com.wonderlando.chemecraft.block;
 
-import com.wonderlando.chemecraft.block.entity.BatchReactorBlockEntity;
+import com.wonderlando.chemecraft.block.entity.TankReactorBlockEntity;
 import com.wonderlando.chemecraft.reaction.Species;
 import com.wonderlando.chemecraft.registry.ModBlockEntities;
 import com.wonderlando.chemecraft.registry.ModBlocks;
@@ -35,11 +35,11 @@ import net.neoforged.neoforge.transfer.transaction.Transaction;
 
 /**
  * The batch reactor controller block: the bottom-centre cell of a 3x3x3 footprint, the other 26 cells of
- * which are {@link BatchReactorCasingBlock}. It hosts the {@link BatchReactorBlockEntity} (fluid vessel +
+ * which are {@link ReactorCasingBlock}. It hosts the {@link TankReactorBlockEntity} (fluid vessel +
  * reaction sim). Right-click any cell with wheat to charge substrate, a bucket to fill/drain water, an
  * empty bottle to cash out a finished product into a potion, or empty-handed to open the GUI.
  */
-public class BatchReactorBlock extends Block implements EntityBlock {
+public class ReactorBlock extends Block implements EntityBlock {
     /** Moles of product consumed per bottle when cashing out. Tunable. */
     private static final double MOLES_PER_BOTTLE = 1.0;
 
@@ -49,9 +49,18 @@ public class BatchReactorBlock extends Block implements EntityBlock {
     private static final int DEPTH = 3;  // cells along the back direction: controller + 2 behind
     private static final int HEIGHT = 3; // cells upward: controller layer + 2 above
 
-    public BatchReactorBlock(BlockBehaviour.Properties properties) {
+    // A CSTR has both an inlet and an outlet (continuous through-flow); a batch reactor has only an outlet.
+    private final boolean hasInlet;
+
+    public ReactorBlock(BlockBehaviour.Properties properties, boolean hasInlet) {
         super(properties);
+        this.hasInlet = hasInlet;
         this.registerDefaultState(this.stateDefinition.any().setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH));
+    }
+
+    /** Whether this reactor exposes an inlet port (true = CSTR, false = batch reactor). */
+    public boolean hasInlet() {
+        return hasInlet;
     }
 
     @Override
@@ -61,7 +70,7 @@ public class BatchReactorBlock extends Block implements EntityBlock {
 
     @Override
     public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
-        return new BatchReactorBlockEntity(pos, state);
+        return new TankReactorBlockEntity(pos, state);
     }
 
     @Override
@@ -69,7 +78,7 @@ public class BatchReactorBlock extends Block implements EntityBlock {
         if (level.isClientSide()) {
             return null; // the reaction is simulated server-side only
         }
-        return createTickerHelper(type, ModBlockEntities.BATCH_REACTOR.get(), BatchReactorBlockEntity::serverTick);
+        return createTickerHelper(type, ModBlockEntities.TANK_REACTOR.get(), TankReactorBlockEntity::serverTick);
     }
 
     @SuppressWarnings("unchecked")
@@ -96,23 +105,24 @@ public class BatchReactorBlock extends Block implements EntityBlock {
         super.setPlacedBy(level, pos, state, placer, stack);
         if (!level.isClientSide()) {
             Direction back = state.getValue(BlockStateProperties.HORIZONTAL_FACING);
-            BlockState casing = ModBlocks.BATCH_REACTOR_CASING.get().defaultBlockState();
+            BlockState casing = ModBlocks.REACTOR_CASING.get().defaultBlockState();
             forEachCasingCell(pos, back, cell -> {
                 if (level.getBlockState(cell).canBeReplaced()) {
                     level.setBlock(cell, casing, Block.UPDATE_ALL);
                 }
             });
-            // Ports sit on the SIDE faces, centred in depth: inlet on the LEFT face (top), outlet on the RIGHT
-            // face (bottom). Each cell stores the direction its port points so the marker faces outward.
+            // Ports sit on the SIDE faces, centred in depth, each storing the direction its ring points outward.
+            // The OUTLET is the bottom-centre of the RIGHT face; the INLET (CSTR only) is the top-centre of the LEFT.
             Direction right = back.getClockWise();
             Direction left = right.getOpposite();
-            BlockPos inlet = pos.relative(back).relative(left).above(2);  // top-centre of the left face
-            BlockPos outlet = pos.relative(back).relative(right);         // bottom-centre of the right face
-            markPort(level, inlet, BatchReactorCasingBlock.PortType.INLET, left);
-            markPort(level, outlet, BatchReactorCasingBlock.PortType.OUTLET, right);
-            // Hook up any pipe already sitting against either port's outward face.
-            PipeBlock.connect(level, inlet.relative(left), left.getOpposite());
+            BlockPos outlet = pos.relative(back).relative(right);
+            markPort(level, outlet, ReactorCasingBlock.PortType.OUTLET, right);
             PipeBlock.connect(level, outlet.relative(right), right.getOpposite());
+            if (hasInlet) {
+                BlockPos inlet = pos.relative(back).relative(left).above(2);
+                markPort(level, inlet, ReactorCasingBlock.PortType.INLET, left);
+                PipeBlock.connect(level, inlet.relative(left), left.getOpposite());
+            }
         }
     }
 
@@ -121,7 +131,7 @@ public class BatchReactorBlock extends Block implements EntityBlock {
     protected void affectNeighborsAfterRemoval(BlockState state, ServerLevel level, BlockPos pos, boolean movedByPiston) {
         Direction back = state.getValue(BlockStateProperties.HORIZONTAL_FACING);
         forEachCasingCell(pos, back, cell -> {
-            if (level.getBlockState(cell).getBlock() instanceof BatchReactorCasingBlock) {
+            if (level.getBlockState(cell).getBlock() instanceof ReactorCasingBlock) {
                 level.removeBlock(cell, false);
             }
         });
@@ -132,10 +142,10 @@ public class BatchReactorBlock extends Block implements EntityBlock {
     }
 
     /** Tag a casing cell as an inlet/outlet port whose ring faces outward in {@code face}. */
-    private static void markPort(Level level, BlockPos cell, BatchReactorCasingBlock.PortType port, Direction face) {
-        if (level.getBlockState(cell).getBlock() instanceof BatchReactorCasingBlock) {
-            level.setBlock(cell, ModBlocks.BATCH_REACTOR_CASING.get().defaultBlockState()
-                    .setValue(BatchReactorCasingBlock.PORT, port)
+    private static void markPort(Level level, BlockPos cell, ReactorCasingBlock.PortType port, Direction face) {
+        if (level.getBlockState(cell).getBlock() instanceof ReactorCasingBlock) {
+            level.setBlock(cell, ModBlocks.REACTOR_CASING.get().defaultBlockState()
+                    .setValue(ReactorCasingBlock.PORT, port)
                     .setValue(BlockStateProperties.HORIZONTAL_FACING, face), Block.UPDATE_ALL);
         }
     }
@@ -164,7 +174,7 @@ public class BatchReactorBlock extends Block implements EntityBlock {
                     }
                     BlockPos candidate = casingPos.offset(dx, dy, dz);
                     BlockState state = level.getBlockState(candidate);
-                    if (state.getBlock() instanceof BatchReactorBlock
+                    if (state.getBlock() instanceof ReactorBlock
                             && regionContains(candidate, state.getValue(BlockStateProperties.HORIZONTAL_FACING), casingPos)) {
                         return candidate;
                     }
@@ -226,13 +236,13 @@ public class BatchReactorBlock extends Block implements EntityBlock {
     /** Apply a held-item interaction to the reactor whose controller is at {@code controllerPos}. */
     static InteractionResult interact(ItemStack stack, Level level, BlockPos controllerPos,
                                       Player player, InteractionHand hand, BlockHitResult hit) {
-        if (!(level.getBlockEntity(controllerPos) instanceof BatchReactorBlockEntity reactor)) {
+        if (!(level.getBlockEntity(controllerPos) instanceof TankReactorBlockEntity reactor)) {
             return InteractionResult.TRY_WITH_EMPTY_HAND;
         }
         // Charge fermentable substrate from wheat.
         if (stack.is(Items.WHEAT)) {
             if (!level.isClientSide()) {
-                reactor.addSubstrate(BatchReactorBlockEntity.SUBSTRATE_PER_WHEAT_G);
+                reactor.addSubstrate(TankReactorBlockEntity.SUBSTRATE_PER_WHEAT_G);
                 if (!player.getAbilities().instabuild) {
                     stack.shrink(1);
                 }
@@ -261,13 +271,13 @@ public class BatchReactorBlock extends Block implements EntityBlock {
 
     /** Open the reactor GUI for the controller at {@code controllerPos} (server-side). */
     static void openGui(Level level, BlockPos controllerPos, Player player) {
-        if (level.getBlockEntity(controllerPos) instanceof BatchReactorBlockEntity reactor) {
+        if (level.getBlockEntity(controllerPos) instanceof TankReactorBlockEntity reactor) {
             player.openMenu(reactor, buf -> buf.writeBlockPos(controllerPos));
         }
     }
 
     /** Bottle a finished product: ethanol -> Swiftness potion, acetic acid (vinegar) -> Strength potion. */
-    private static void cashOut(BatchReactorBlockEntity reactor, Player player, ItemStack bottle) {
+    private static void cashOut(TankReactorBlockEntity reactor, Player player, ItemStack bottle) {
         ItemStack potion;
         if (reactor.extract(Species.ETHANOL, MOLES_PER_BOTTLE)) {
             potion = PotionContents.createItemStack(Items.POTION, Potions.SWIFTNESS);

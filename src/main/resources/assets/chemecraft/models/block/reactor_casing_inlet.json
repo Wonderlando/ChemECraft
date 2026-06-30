@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "chemecraft:block/reactor_casing_side",
+    "down": "chemecraft:block/reactor_casing_top",
+    "up": "chemecraft:block/reactor_casing_top",
+    "north": "chemecraft:block/reactor_casing_inlet",
+    "east": "chemecraft:block/reactor_casing_side",
+    "south": "chemecraft:block/reactor_casing_side",
+    "west": "chemecraft:block/reactor_casing_side"
+  }
+}

@@ -49,12 +49,12 @@ public class Config {
                     "Higher = the reactor loses heat to the environment faster.")
             .defineInRange("reactorCoolingPerDay", 0.2, 0.0, 100.0);
 
-    public static final ModConfigSpec.DoubleValue REACTOR_PIPE_TRANSFER_L_PER_DAY = BUILDER
-            .comment("Fixed fluid-transfer rate through pipes, in litres per MODEL-day.",
-                    "Uses the SAME model clock as the reaction rate constants (see reactionModelDaysPerTick),",
-                    "so residence time (tank volume / flow rate) and reaction timescales are comparable.",
-                    "At the defaults this drains a full 27 L vessel in roughly two real minutes.")
-            .defineInRange("pipeTransferLitersPerDay", 10.0, 0.0, 1.0e9);
+    public static final ModConfigSpec.DoubleValue REACTOR_OUTLET_FLOW_L_PER_MIN = BUILDER
+            .comment("Rate fluid leaves a reactor's outlet, in litres per real minute.",
+                    "Pipes are passive: whatever rate flows in at the outlet is delivered unchanged to the",
+                    "destination (flow in = flow out). Converted internally to the model clock (L/day) using",
+                    "1440 min/day. At the default 0.1 L/min (~6 L/hr) a full 27 L vessel drains in ~4.5 hours.")
+            .defineInRange("reactorOutletFlowLitersPerMin", 0.1, 0.0, 1.0e9);
 
     static final ModConfigSpec SPEC = BUILDER.build();
 

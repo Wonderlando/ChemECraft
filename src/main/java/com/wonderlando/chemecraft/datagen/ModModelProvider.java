@@ -25,13 +25,19 @@ public class ModModelProvider extends ModelProvider {
 
     @Override
     protected void registerModels(BlockModelGenerators blockModels, ItemModelGenerators itemModels) {
-        // The reactor controller and casing are HAND-AUTHORED (assets/.../blockstates/batch_reactor*.json): the
-        // controller shows an outlet ring on its front face and the front-top-centre casing shows an inlet ring,
-        // both orientation-dependent. They are excluded from getKnownBlocks below so no blockstate is generated;
-        // the controller's BlockItem model still auto-generates (pointing at the hand-authored block/batch_reactor).
-        // Branch/merge hubs are plain cubes (single texture all faces); item models auto-generate.
+        // The reactor controllers (CSTR + batch) and the shared casing are HAND-AUTHORED
+        // (assets/.../blockstates/cstr.json, batch_reactor.json, reactor_casing.json): the casing shows the
+        // inlet/outlet rings on the marked cells. They are excluded from getKnownBlocks below so no blockstate
+        // is generated; both controllers' BlockItem models are pointed at the shared hand-authored block/reactor.
+        blockModels.registerSimpleItemModel(ModBlocks.CSTR.get(), Identifier.parse("chemecraft:block/reactor"));
+        blockModels.registerSimpleItemModel(ModBlocks.BATCH_REACTOR.get(), Identifier.parse("chemecraft:block/reactor"));
+        // The splitter and the testing reservoir/sink are plain cubes (single texture); item models auto-generate.
         blockModels.createTrivialBlock(ModBlocks.SPLITTER.get(), TexturedModel.CUBE);
-        blockModels.createTrivialBlock(ModBlocks.MIXER.get(), TexturedModel.CUBE);
+        blockModels.createTrivialBlock(ModBlocks.RESERVOIR.get(), TexturedModel.CUBE);
+        blockModels.createTrivialBlock(ModBlocks.SINK.get(), TexturedModel.CUBE);
+        // The mixer is HAND-AUTHORED (directional: an outlet ring on its FACING face) — see
+        // assets/.../blockstates/mixer.json. Excluded from getKnownBlocks below; its item model auto-generates
+        // pointing at the hand-authored block/mixer.
         // The pipe's multipart blockstate + models are authored by hand (see assets/.../blockstates/pipe.json);
         // it is excluded from getKnownBlocks below so the generator doesn't expect a generated blockstate. We
         // still register its item model here (pointing at the hand-authored core model) so the auto-generated
@@ -46,7 +52,9 @@ public class ModModelProvider extends ModelProvider {
     protected Stream<? extends Holder<Block>> getKnownBlocks() {
         return super.getKnownBlocks().filter(holder ->
                 holder.value() != ModBlocks.PIPE.get()
+                        && holder.value() != ModBlocks.MIXER.get()
+                        && holder.value() != ModBlocks.CSTR.get()
                         && holder.value() != ModBlocks.BATCH_REACTOR.get()
-                        && holder.value() != ModBlocks.BATCH_REACTOR_CASING.get());
+                        && holder.value() != ModBlocks.REACTOR_CASING.get());
     }
 }

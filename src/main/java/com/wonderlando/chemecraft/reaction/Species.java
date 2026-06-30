@@ -6,7 +6,9 @@ public enum Species {
     BIOMASS(24.6, 0.0, false, "Biomass"),           // yeast dry cell (approx. CH1.8O0.5N0.2), suspended
     ETHANOL(46.069, 0.789, false, "Ethanol"),       // product, materialized as ethanol fluid
     CARBON_DIOXIDE(44.01, 0.0, true, "CO2"),         // gas product — vents out of the reactor
-    ACETIC_ACID(60.052, 0.0, false, "Acetic Acid"); // souring product, dissolved
+    ACETIC_ACID(60.052, 0.0, false, "Acetic Acid"), // souring product, dissolved
+    SPECIES_A(100.0, 0.0, false, "A"),              // generic test species A
+    SPECIES_B(100.0, 0.0, false, "B");              // generic test species B
 
     private final double molarMass; // g/mol
     private final double density;   // g/mL when it forms a free liquid (0 = not a standalone fluid)

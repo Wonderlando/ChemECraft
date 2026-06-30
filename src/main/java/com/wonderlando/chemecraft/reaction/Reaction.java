@@ -1,6 +1,7 @@
 package com.wonderlando.chemecraft.reaction;
 
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -92,12 +93,22 @@ public abstract class Reaction {
     /**
      * Advance molar {@code amounts} (indexed by {@link Species#ordinal()}) by one forward-Euler step of
      * {@code dtDays} under this reaction: the NET rate is evaluated at the current concentrations
-     * (amount / volume) and applied through the net stoichiometry, with amounts clamped non-negative. A
-     * negative net rate runs the reaction in reverse (consuming products, regenerating reactants).
-     * (For several simultaneous reactions in one vessel, evaluate all rates first, then apply.)
+     * (amount / volume) and applied through the net stoichiometry. A negative net rate runs the reaction in
+     * reverse (consuming products, regenerating reactants). (For several simultaneous reactions in one vessel,
+     * evaluate all rates first, then apply.)
      *
-     * @return the reaction extent for this step in moles ({@code netRate * volume * dt}); positive for a
-     *         forward step, negative for a reverse one. Multiply by {@code -enthalpy()} to get heat released.
+     * <p>Rate constants are in SI units: s⁻¹ for first-order reactions, L/(mol·s) for second-order.
+     * {@code dtDays} is converted to seconds internally (×86400) so the units work out.
+     *
+     * <p><b>Mass balance.</b> A single scalar reaction {@code extent} (moles) is applied to every species
+     * through its stoichiometric coefficient. If an explicit step would drive any consumed species negative,
+     * the extent is reduced to exactly empty that species — so the coupled species change by the matching
+     * amount and atoms are never created or destroyed, even when the step badly overshoots. (Independently
+     * clamping each species, as a naive {@code max(0, …)} would, breaks the stoichiometric coupling and can
+     * manufacture product from a depleted reactant; we deliberately clamp the shared extent instead.)
+     *
+     * @return the reaction extent actually applied this step in moles; positive for a forward step, negative
+     *         for a reverse one. Multiply by {@code -enthalpy()} to get heat released.
      */
     public double step(double[] amounts, double volumeL, double dtDays, double temperatureK) {
         if (volumeL <= 0.0 || dtDays <= 0.0) {
@@ -111,14 +122,53 @@ public abstract class Reaction {
         if (r == 0.0) {
             return 0.0;
         }
+        double dtSeconds = dtDays * 86400.0;
+        double extent = r * volumeL * dtSeconds; // raw moles of reaction this step (signed)
+
+        // Limit the shared extent so no species it consumes goes negative (species s changes by net(s)*extent;
+        // it is consumed when net(s)*extent < 0). Reducing the one extent keeps the whole step stoichiometric.
+        for (Species species : Species.values()) {
+            double nu = net(species);
+            if (nu == 0.0 || nu * extent >= 0.0) {
+                continue; // unchanged or being produced in this direction — no lower bound from it
+            }
+            double maxMagnitude = amounts[species.ordinal()] / Math.abs(nu);
+            extent = (extent > 0.0) ? Math.min(extent, maxMagnitude) : Math.max(extent, -maxMagnitude);
+        }
+        if (extent == 0.0) {
+            return 0.0;
+        }
         for (Species species : Species.values()) {
             double nu = net(species);
             if (nu != 0.0) {
                 int i = species.ordinal();
-                amounts[i] = Math.max(0.0, amounts[i] + nu * r * volumeL * dtDays);
+                amounts[i] = Math.max(0.0, amounts[i] + nu * extent); // max() only mops up float round-off
             }
         }
-        return r * volumeL * dtDays;
+        return extent;
+    }
+
+    /**
+     * Largest fractional consumption rate (units of 1/s) among the species this reaction consumes at the given
+     * state — i.e. the inverse of the shortest depletion timescale. The integrator uses this to size its
+     * substeps so an explicit forward-Euler step never overshoots (it keeps {@code rate·dt} per consumed
+     * species small). Returns 0 when nothing is being consumed (no reaction, or every reactant is exhausted).
+     */
+    public double fastestRelativeRate(double[] concentration, double temperatureK) {
+        double r = rate(concentration, temperatureK); // net rate, mol/(L·s)
+        if (r == 0.0) {
+            return 0.0;
+        }
+        double fastest = 0.0;
+        for (Species species : Species.values()) {
+            double nu = net(species);
+            double consumptionRate = -nu * r; // mol/(L·s), positive when this species is being consumed
+            double conc = concentration[species.ordinal()];
+            if (consumptionRate > 0.0 && conc > 0.0) {
+                fastest = Math.max(fastest, consumptionRate / conc);
+            }
+        }
+        return fastest;
     }
 
     /**
@@ -147,9 +197,19 @@ public abstract class Reaction {
         return 0.0;
     }
 
-    /** Activation energy of the REVERSE reaction in J/mol (only relevant when reversible). Default 0. */
+    /**
+     * Activation energy of the REVERSE reaction in J/mol (only relevant when reversible). By DEFAULT this is
+     * derived for thermodynamic consistency (the van't Hoff relation): {@code Ea_r = Ea_f - ΔH_rxn}.
+     *
+     * <p>Why: with both rate constants Arrhenius, the equilibrium constant K = kf/kr varies with temperature
+     * as {@code exp[(Ea_f - Ea_r)/R · (1/T_ref - 1/T)]}, while van't Hoff requires
+     * {@code K(T) = K_ref · exp[ΔH/R · (1/T_ref - 1/T)]}. Matching them forces {@code Ea_f - Ea_r = ΔH}. So the
+     * equilibrium position shifts with temperature using the SAME {@link #enthalpy() ΔH} as the energy balance:
+     * an exothermic reaction (ΔH &lt; 0 ⇒ Ea_r &gt; Ea_f) loses equilibrium conversion as it heats up
+     * (Le Chatelier), and gains it when cooled. Override only for a deliberately non-thermodynamic reverse.
+     */
     public double activationEnergyReverse() {
-        return 0.0;
+        return activationEnergyForward() - enthalpy();
     }
 
     public double forwardRateConstant() {
@@ -171,6 +231,23 @@ public abstract class Reaction {
 
     public Map<Species, Integer> products() {
         return products;
+    }
+
+    /**
+     * The species this reaction "holds data for": the ones shown in the reactor GUI and treated as
+     * meaningful vessel state. Defaults to the union of its reactants and products.
+     *
+     * <p><b>DESIGN RULE (reaction chaining).</b> When this reaction consumes the PRODUCT of an upstream
+     * reaction — i.e. reactors are chained by piping the first reaction's output into a reactor running this
+     * one — this set MUST include ALL of the upstream reaction's species. The upstream broth's leftover
+     * impurities ride along in the transferred well-mixed mixture; declaring them here keeps them tracked and
+     * visible instead of looking deleted. Override and union in the upstream reaction's {@code trackedSpecies()}.
+     */
+    public Set<Species> trackedSpecies() {
+        EnumSet<Species> set = EnumSet.noneOf(Species.class);
+        set.addAll(reactants.keySet());
+        set.addAll(products.keySet());
+        return set;
     }
 
     /** Human-readable name for this reaction (shown in the reactor GUI). */

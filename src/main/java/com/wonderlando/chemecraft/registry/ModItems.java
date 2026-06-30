@@ -12,6 +12,9 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 public final class ModItems {
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(ChemECraft.MODID);
 
+    public static final DeferredItem<BlockItem> CSTR_ITEM =
+            ITEMS.registerSimpleBlockItem("cstr", ModBlocks.CSTR);
+
     public static final DeferredItem<BlockItem> BATCH_REACTOR_ITEM =
             ITEMS.registerSimpleBlockItem("batch_reactor", ModBlocks.BATCH_REACTOR);
 
@@ -23,6 +26,12 @@ public final class ModItems {
 
     public static final DeferredItem<BlockItem> MIXER_ITEM =
             ITEMS.registerSimpleBlockItem("mixer", ModBlocks.MIXER);
+
+    public static final DeferredItem<BlockItem> RESERVOIR_ITEM =
+            ITEMS.registerSimpleBlockItem("reservoir", ModBlocks.RESERVOIR);
+
+    public static final DeferredItem<BlockItem> SINK_ITEM =
+            ITEMS.registerSimpleBlockItem("sink", ModBlocks.SINK);
 
     // A wrench: right-click a pipe to rotate its flow direction; sneak-right-click a face to toggle a connection.
     public static final DeferredItem<WrenchItem> WRENCH =

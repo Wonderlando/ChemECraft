@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "facing=north": { "model": "chemecraft:block/mixer" },
+    "facing=east":  { "model": "chemecraft:block/mixer", "y": 90 },
+    "facing=south": { "model": "chemecraft:block/mixer", "y": 180 },
+    "facing=west":  { "model": "chemecraft:block/mixer", "y": 270 },
+    "facing=up":    { "model": "chemecraft:block/mixer", "x": 270 },
+    "facing=down":  { "model": "chemecraft:block/mixer", "x": 90 }
+  }
+}

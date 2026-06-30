@@ -1,7 +1,7 @@
 package com.wonderlando.chemecraft.client;
 
-import com.wonderlando.chemecraft.block.entity.BatchReactorBlockEntity;
-import com.wonderlando.chemecraft.menu.BatchReactorMenu;
+import com.wonderlando.chemecraft.block.entity.TankReactorBlockEntity;
+import com.wonderlando.chemecraft.menu.ReactorMenu;
 import com.wonderlando.chemecraft.reaction.Reaction;
 import com.wonderlando.chemecraft.reaction.ReactionRegistry;
 import com.wonderlando.chemecraft.reaction.Species;
@@ -21,23 +21,20 @@ import net.minecraft.world.entity.player.Inventory;
 
 /**
  * Display + control screen for the batch reactor. A vertical level gauge on the far left shows how full the
- * vessel is (out of its bucket capacity); the left column shows the selected reaction, liquids, solutes
+ * vessel is (out of its litre capacity); the left column shows the selected reaction, liquids, solutes
  * (amount + concentration), and the current rate; the right side shows a live rolling plot of concentrations
  * (or the reaction rate) over time. The plot history is sampled client-side while the GUI is open, so it
  * resets when the screen is closed.
  */
-public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu> {
-    // Synced display-slot indices (see BatchReactorBlockEntity#getDisplaySlot).
-    private static final int SLOT_WATER_MB = 0;
-    private static final int SLOT_ETHANOL_MB = 1;
-    private static final int SLOT_SUBSTRATE_MMOL = 2;
-    private static final int SLOT_BIOMASS_MMOL = 3;
-    private static final int SLOT_CO2_MMOL = 4;
-    private static final int SLOT_ACETIC_MMOL = 5;
-    private static final int SLOT_SELECTED = 6;
-    private static final int SLOT_TEMP_DK = 7; // temperature in deci-kelvin (0.1 K)
-    private static final int SLOT_RELEASING = 8;  // 1 while the outlet is actively releasing
-    private static final int SLOT_HAS_DEST = 9;   // 1 when a downstream reactor inlet is reachable
+public class ReactorScreen extends AbstractContainerScreen<ReactorMenu> {
+    // Synced display-slot indices (see TankReactorBlockEntity#getDisplaySlot). Species amounts live in a
+    // contiguous range starting at SPECIES_BASE, addressed by Species#ordinal() — no per-species constants.
+    private static final int SLOT_WATER_MB = TankReactorBlockEntity.SLOT_WATER;
+    private static final int SLOT_SELECTED = TankReactorBlockEntity.SLOT_SELECTED;
+    private static final int SLOT_TEMP_DK = TankReactorBlockEntity.SLOT_TEMP_DK;
+    private static final int SLOT_RELEASING = TankReactorBlockEntity.SLOT_RELEASING;
+    private static final int SLOT_HAS_DEST = TankReactorBlockEntity.SLOT_HAS_DEST;
+    private static final int SPECIES_BASE = TankReactorBlockEntity.SPECIES_BASE;
 
     private static final int IMAGE_W = 380;
     private static final int IMAGE_H = 220;
@@ -51,7 +48,8 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
     private static final int CONTENT_X = GAUGE_X + GAUGE_W + 6; // text/buttons start here
     private static final int CONTENT_W = LEFT_W - CONTENT_X - 8;
 
-    private static final int CAPACITY_MB = BatchReactorBlockEntity.CAPACITY_MB;
+    private static final int CAPACITY_MB = TankReactorBlockEntity.CAPACITY_MB;
+    private static final int MB_PER_LITER = TankReactorBlockEntity.MB_PER_LITER; // 1 L = 1000 mB (1 bucket = 1 L)
 
     private static final int HISTORY = 240;     // samples retained (~2 min at SAMPLE_TICKS = 10)
     private static final int SAMPLE_TICKS = 10;  // take a sample every N client ticks
@@ -79,7 +77,7 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
     private int samples = 0;
     private int tickCounter = 0;
 
-    public BatchReactorScreen(BatchReactorMenu menu, Inventory playerInventory, Component title) {
+    public ReactorScreen(ReactorMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title, IMAGE_W, IMAGE_H);
     }
 
@@ -98,12 +96,12 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
         int rowY = topPos + IMAGE_H - 26;
         int halfW = (CONTENT_W - 4) / 2;
         releaseButton = Button.builder(Component.literal("Release"), b ->
-                this.minecraft.gameMode.handleInventoryButtonClick(this.menu.containerId, BatchReactorMenu.BUTTON_RELEASE))
+                this.minecraft.gameMode.handleInventoryButtonClick(this.menu.containerId, ReactorMenu.BUTTON_RELEASE))
                 .bounds(leftPos + CONTENT_X, rowY, halfW, 18).build();
         addRenderableWidget(releaseButton);
 
         Button emptyButton = Button.builder(Component.literal("Empty"), b ->
-                this.minecraft.gameMode.handleInventoryButtonClick(this.menu.containerId, BatchReactorMenu.BUTTON_EMPTY))
+                this.minecraft.gameMode.handleInventoryButtonClick(this.menu.containerId, ReactorMenu.BUTTON_EMPTY))
                 .bounds(leftPos + CONTENT_X + halfW + 4, rowY, CONTENT_W - halfW - 4, 18).build();
         addRenderableWidget(emptyButton);
 
@@ -157,12 +155,15 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
 
         Reaction reaction = ReactionRegistry.byIndex(menu.value(SLOT_SELECTED));
         int waterMb = menu.value(SLOT_WATER_MB);
-        int ethanolMb = menu.value(SLOT_ETHANOL_MB);
         double[] conc = currentConcentrations();
 
-        boolean empty = waterMb == 0 && ethanolMb == 0
-                && menu.value(SLOT_SUBSTRATE_MMOL) == 0 && menu.value(SLOT_BIOMASS_MMOL) == 0
-                && menu.value(SLOT_CO2_MMOL) == 0 && menu.value(SLOT_ACETIC_MMOL) == 0;
+        boolean empty = waterMb == 0;
+        for (Species s : Species.values()) {
+            if (menu.value(SPECIES_BASE + s.ordinal()) != 0) {
+                empty = false;
+                break;
+            }
+        }
         selector.active = empty;
         String reactionName = (reaction == null) ? "none" : reaction.displayName();
         String hint = empty
@@ -179,7 +180,7 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
 
         graphics.text(f, this.title, x, top + 8, TITLE, true);
 
-        drawGauge(graphics, f, waterMb, ethanolMb);
+        drawGauge(graphics, f, waterMb);
 
         int y = top + 44;
         if (reaction != null) {
@@ -200,15 +201,16 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
 
         graphics.text(f, "Liquids", x, y, HEADER, true);
         y += 10;
-        graphics.text(f, "  Water: " + waterMb + " mB", x, y, WATER_COLOR, true);
+        graphics.text(f, String.format("  Water: %.1f L", waterMb / (double) MB_PER_LITER), x, y, WATER_COLOR, true);
         y += 9;
         for (Species s : Species.values()) {
             if (involved.contains(s) && ReactionRegistry.LIQUID_SPECIES.contains(s)) {
-                graphics.text(f, "  " + s.displayName() + ": " + liquidMb(s) + " mB", x, y, seriesColor(s), true);
+                graphics.text(f, String.format("  %s: %.1f L", s.displayName(), liquidMb(s) / (double) MB_PER_LITER),
+                        x, y, seriesColor(s), true);
                 y += 9;
             }
         }
-        graphics.text(f, String.format("  Fill: %.1f / %d B", (waterMb + ethanolMb) / 1000.0, CAPACITY_MB / 1000),
+        graphics.text(f, String.format("  Fill: %.1f / %d L", waterMb / (double) MB_PER_LITER, CAPACITY_MB / MB_PER_LITER),
                 x, y, TEXT, true);
         y += 13;
 
@@ -227,7 +229,7 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
         y += 5;
 
         double rate = currentRate(conc);
-        graphics.text(f, String.format("Rate: %.4f mol/L/day", rate), x, y, TEXT, true);
+        graphics.text(f, String.format("Rate: %.4f mol/L/s", rate), x, y, TEXT, true);
 
         drawPlot(graphics, f, involved);
     }
@@ -237,8 +239,8 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
         // All content is drawn in extractContents / extractBackground; suppress default labels.
     }
 
-    /** A vertical level gauge: total fill out of the vessel capacity, water and ethanol stacked from the bottom. */
-    private void drawGauge(GuiGraphicsExtractor graphics, Font f, int waterMb, int ethanolMb) {
+    /** A vertical level gauge: liquid fill (water, the only fluid phase) out of the vessel capacity. */
+    private void drawGauge(GuiGraphicsExtractor graphics, Font f, int waterMb) {
         int gx0 = leftPos + GAUGE_X;
         int gx1 = gx0 + GAUGE_W;
         int gy0 = topPos + GAUGE_TOP;
@@ -250,21 +252,12 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
         int innerBottom = gy1 - 1;
         int innerH = innerBottom - innerTop;
 
-        int waterH = (int) Math.round(Math.min(waterMb, CAPACITY_MB) / (double) CAPACITY_MB * innerH);
-        int ethCap = Math.max(0, CAPACITY_MB - waterMb);
-        int ethH = (int) Math.round(Math.min(ethanolMb, ethCap) / (double) CAPACITY_MB * innerH);
-        waterH = Math.min(waterH, innerH);
-        ethH = Math.min(ethH, innerH - waterH);
-
+        int waterH = Math.min(innerH, (int) Math.round(Math.min(waterMb, CAPACITY_MB) / (double) CAPACITY_MB * innerH));
         if (waterH > 0) {
             graphics.fill(gx0 + 1, innerBottom - waterH, gx1 - 1, innerBottom, WATER_COLOR);
         }
-        if (ethH > 0) {
-            int top = innerBottom - waterH - ethH;
-            graphics.fill(gx0 + 1, top, gx1 - 1, innerBottom - waterH, seriesColor(Species.ETHANOL));
-        }
 
-        // Tick marks at each third of capacity (9 B intervals), then the border on top.
+        // Tick marks at each third of capacity (9 L intervals), then the border on top.
         graphics.fill(gx0 + 1, innerTop + innerH / 3, gx1 - 1, innerTop + innerH / 3 + 1, AXIS);
         graphics.fill(gx0 + 1, innerTop + 2 * innerH / 3, gx1 - 1, innerTop + 2 * innerH / 3 + 1, AXIS);
         graphics.fill(gx0, gy0, gx1, gy0 + 1, BORDER);
@@ -333,7 +326,7 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
         }
 
         // Y-axis: max value at top (with units), 0 at the bottom.
-        String yUnit = showRate ? "mol/L/day" : "mol/L";
+        String yUnit = showRate ? "mol/L/s" : "mol/L";
         graphics.text(f, String.format("%.3g %s", max, yUnit), px0, by0 + 1, AXIS, false);
         graphics.text(f, "0", px0, by1 - 9, AXIS, false);
 
@@ -374,12 +367,9 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
         double[] c = new double[Species.values().length];
         double v = menu.value(SLOT_WATER_MB) / 1000.0;
         if (v > 0.0) {
-            c[Species.SUBSTRATE.ordinal()] = (menu.value(SLOT_SUBSTRATE_MMOL) / 1000.0) / v;
-            c[Species.BIOMASS.ordinal()] = (menu.value(SLOT_BIOMASS_MMOL) / 1000.0) / v;
-            c[Species.CARBON_DIOXIDE.ordinal()] = (menu.value(SLOT_CO2_MMOL) / 1000.0) / v;
-            c[Species.ACETIC_ACID.ordinal()] = (menu.value(SLOT_ACETIC_MMOL) / 1000.0) / v;
-            double ethanolMol = menu.value(SLOT_ETHANOL_MB) * Species.ETHANOL.density() / Species.ETHANOL.molarMass();
-            c[Species.ETHANOL.ordinal()] = ethanolMol / v;
+            for (Species s : Species.values()) {
+                c[s.ordinal()] = molOf(s) / v;
+            }
         }
         return c;
     }
@@ -390,34 +380,27 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
         return (reaction != null && menu.value(SLOT_WATER_MB) > 0) ? reaction.rate(conc, tempK) : 0.0;
     }
 
-    /** Species the reaction consumes or produces (its reactants and products); empty when none selected. */
+    /**
+     * Species the reactor shows for this reaction: the reaction's {@link Reaction#trackedSpecies()} (its own
+     * reactants/products plus any upstream species it holds data for), minus vented gases. Empty when none.
+     */
     private static Set<Species> involvedSpecies(Reaction reaction) {
         if (reaction == null) {
             return Set.of();
         }
         EnumSet<Species> set = EnumSet.noneOf(Species.class);
-        set.addAll(reaction.reactants().keySet());
-        set.addAll(reaction.products().keySet());
+        set.addAll(reaction.trackedSpecies());
         set.removeIf(Species::gas); // vented gases (CO2) escape rather than accumulate — don't display them
         return set;
     }
 
-    /** Moles of a species from the synced display values. */
+    /** Moles of a species from the synced display values (the per-species slot at {@code SPECIES_BASE + ordinal}). */
     private double molOf(Species species) {
-        return switch (species) {
-            case SUBSTRATE -> menu.value(SLOT_SUBSTRATE_MMOL) / 1000.0;
-            case BIOMASS -> menu.value(SLOT_BIOMASS_MMOL) / 1000.0;
-            case CARBON_DIOXIDE -> menu.value(SLOT_CO2_MMOL) / 1000.0;
-            case ACETIC_ACID -> menu.value(SLOT_ACETIC_MMOL) / 1000.0;
-            case ETHANOL -> menu.value(SLOT_ETHANOL_MB) * Species.ETHANOL.density() / Species.ETHANOL.molarMass();
-        };
+        return menu.value(SPECIES_BASE + species.ordinal()) / 1000.0;
     }
 
-    /** Volume (mB) of a species that is held as a liquid in the tank. */
+    /** Volume (mB) of a species that is held as a liquid in the tank (none currently — all stay dissolved). */
     private int liquidMb(Species species) {
-        if (species == Species.ETHANOL) {
-            return menu.value(SLOT_ETHANOL_MB);
-        }
         return (int) Math.round(molOf(species) * species.molarMass() / species.density());
     }
 
@@ -435,6 +418,9 @@ public class BatchReactorScreen extends AbstractContainerScreen<BatchReactorMenu
             case ETHANOL -> 0xFF7FB8FF;
             case CARBON_DIOXIDE -> 0xFFB0B0B0;
             case ACETIC_ACID -> 0xFFFF8080;
+            case SPECIES_A -> 0xFFC890FF;
+            case SPECIES_B -> 0xFF90FFD0;
+            default -> 0xFFB0B0B0; // any future species: neutral gray until given a colour (no crash, no headache)
         };
     }
 }
