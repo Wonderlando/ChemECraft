@@ -30,10 +30,10 @@ public class Acetification extends Reaction {
         TRACKED = Set.copyOf(tracked);
     }
 
-    /** Forward (souring) rate constant, s⁻¹. Tunable. */
-    public static final double DEFAULT_FORWARD_RATE_CONSTANT = 0.05 / 86400.0;
-    /** Reverse rate constant, s⁻¹. Tunable; Keq = forward/reverse sets the equilibrium position. */
-    public static final double DEFAULT_REVERSE_RATE_CONSTANT = 0.005 / 86400.0;
+    /** Forward (souring) rate constant, s⁻¹ (real time). Tunable. */
+    public static final double DEFAULT_FORWARD_RATE_CONSTANT = 0.00125;
+    /** Reverse rate constant, s⁻¹ (real time). Tunable; Keq = forward/reverse = 10 sets the equilibrium. */
+    public static final double DEFAULT_REVERSE_RATE_CONSTANT = 0.000125;
     /**
      * Exothermic heat of reaction per mole of ethanol soured, in joules. Tuned caricature (O2/water are
      * implicit, so this is an effective ΔH): negative enough to give a clear van't Hoff equilibrium shift

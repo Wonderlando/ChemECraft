@@ -35,19 +35,22 @@ public class Config {
             .defineListAllowEmpty("items", List.of("minecraft:iron_ingot"), () -> "", Config::validateItemName);
 
     // ChemECraft — batch reactor
-    public static final ModConfigSpec.DoubleValue REACTION_MODEL_DAYS_PER_TICK = BUILDER
-            .comment("Model-days of fermentation simulated per game tick.",
-                    "Default ~0.00125 makes a typical batch finish in roughly one in-game day (24000 ticks).")
-            .defineInRange("reactionModelDaysPerTick", 0.00125, 0.0, 1.0);
+    public static final ModConfigSpec.DoubleValue SIMULATION_SPEED = BUILDER
+            .comment("Simulation speed multiplier. 1.0 = REAL TIME: in-game seconds equal real seconds.",
+                    "(Minecraft runs 20 ticks/s, so one tick advances the chemistry by 0.05 s.) Rate constants",
+                    "are quoted per real second, residence time tau = V/Q is in real seconds, etc. Raise this to",
+                    "fast-forward long runs — e.g. 60 makes one real second cover one model minute.")
+            .defineInRange("simulationSpeed", 1.0, 0.0, 1.0e6);
 
     public static final ModConfigSpec.DoubleValue REACTOR_AMBIENT_TEMPERATURE_K = BUILDER
             .comment("Ambient temperature the reactor starts at and cools toward, in kelvin (298 K ~= 25 C).")
             .defineInRange("reactorAmbientTemperatureK", 298.0, 0.0, 1000.0);
 
-    public static final ModConfigSpec.DoubleValue REACTOR_COOLING_PER_DAY = BUILDER
-            .comment("Newton's-law-of-cooling constant K in dT/dt = -K*(T - T_ambient), per model-day.",
-                    "Higher = the reactor loses heat to the environment faster.")
-            .defineInRange("reactorCoolingPerDay", 0.2, 0.0, 100.0);
+    public static final ModConfigSpec.DoubleValue REACTOR_COOLING_PER_SECOND = BUILDER
+            .comment("Newton's-law-of-cooling constant K in dT/dt = -K*(T - T_ambient), per model-SECOND.",
+                    "In real time (simulationSpeed=1) the default 0.005/s is a ~200 s (~3 min) cooling time",
+                    "constant. Higher = the reactor loses heat to the environment faster.")
+            .defineInRange("reactorCoolingPerSecond", 0.005, 0.0, 1.0e6);
 
     public static final ModConfigSpec.DoubleValue REACTOR_OUTLET_FLOW_L_PER_MIN = BUILDER
             .comment("Rate fluid leaves a reactor's outlet, in litres per real minute.",

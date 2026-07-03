@@ -58,6 +58,13 @@ public abstract class ReactorBlockEntity extends BlockEntity implements MenuProv
      */
     public static final int MB_PER_LITER = 1000;
 
+    /**
+     * Model-seconds of chemistry advanced per game tick at {@code simulationSpeed = 1}. Minecraft runs 20
+     * ticks/second, so 0.05 makes MODEL TIME = REAL TIME (in-game seconds are real seconds). The effective
+     * per-tick step is this × {@link Config#SIMULATION_SPEED}.
+     */
+    public static final double MODEL_SECONDS_PER_TICK = 0.05;
+
     private static final double SEED_BIOMASS_G_PER_L = 0.5; // auto-seeded yeast inoculum
     private static final int MAX_CATCHUP_SUBSTEPS = 2000;
     private static final double MAX_SUBSTEP_DAYS = 0.05;
@@ -200,14 +207,23 @@ public abstract class ReactorBlockEntity extends BlockEntity implements MenuProv
 
     /** Empty the reactor: discard all fluids and dissolved species, returning it to a clean state. */
     public void empty() {
-        for (int i = 0; i < tank.size(); i++) {
-            tank.set(i, FluidResource.EMPTY, 0);
-        }
-        Arrays.fill(amounts, 0.0);
+        discardContents();
         lastGameTime = Long.MIN_VALUE;
         temperatureK = Config.REACTOR_AMBIENT_TEMPERATURE_K.get();
         setChanged();
         sync();
+    }
+
+    /**
+     * Clear all fluids and dissolved species with no other bookkeeping (no sync, no temperature reset). Cheap
+     * enough to call every tick — the sink uses it to drain itself continuously so it can never fill up and
+     * throttle whatever feeds it (a full destination caps {@link #transferMixtureTo}, backing flow upstream).
+     */
+    protected void discardContents() {
+        for (int i = 0; i < tank.size(); i++) {
+            tank.set(i, FluidResource.EMPTY, 0);
+        }
+        Arrays.fill(amounts, 0.0);
     }
 
     /** Remove {@code moles} of a product to cash out; returns true if there was enough available. */
@@ -275,8 +291,9 @@ public abstract class ReactorBlockEntity extends BlockEntity implements MenuProv
         }
 
         double ambient = Config.REACTOR_AMBIENT_TEMPERATURE_K.get();
-        double coolingK = Config.REACTOR_COOLING_PER_DAY.get();
-        double totalModelDays = elapsedTicks * Config.REACTION_MODEL_DAYS_PER_TICK.get();
+        double coolingKPerSecond = Config.REACTOR_COOLING_PER_SECOND.get();
+        // Real-time clock: model-seconds per tick × speed, expressed in days for the substep/cooling math below.
+        double totalModelDays = elapsedTicks * MODEL_SECONDS_PER_TICK * Config.SIMULATION_SPEED.get() / 86400.0;
 
         Reaction reaction = ReactionRegistry.byIndex(selectedReaction);
 
@@ -332,7 +349,8 @@ public abstract class ReactorBlockEntity extends BlockEntity implements MenuProv
                 }
             }
             // Newton's law of cooling toward ambient, integrated exactly (stable for any step size).
-            temperatureK = ambient + (temperatureK - ambient) * Math.exp(-coolingK * dtDays);
+            double dtSeconds = dtDays * 86400.0;
+            temperatureK = ambient + (temperatureK - ambient) * Math.exp(-coolingKPerSecond * dtSeconds);
         }
 
         if (reacted) {
@@ -447,10 +465,7 @@ public abstract class ReactorBlockEntity extends BlockEntity implements MenuProv
             budget = inflow;
         } else {
             // Batch reactor / reservoir: push at the configured rate.
-            // L/min ÷ 1440 min/day × model-days/tick × mB/L = mB/tick.
-            double ratePerTick = (outletFlowLitersPerMin() / 1440.0)
-                    * Config.REACTION_MODEL_DAYS_PER_TICK.get() * MB_PER_LITER;
-            releaseCarryMb += ratePerTick;
+            releaseCarryMb += litersPerMinToMbPerTick(outletFlowLitersPerMin());
             budget = (int) Math.floor(releaseCarryMb);
             releaseCarryMb -= budget;
         }
@@ -519,9 +534,19 @@ public abstract class ReactorBlockEntity extends BlockEntity implements MenuProv
         return FluidTransport.traceToInlet(level, outletCell(), outletFace(), this);
     }
 
-    /** Litres per real minute this node pushes out of its outlet. Default = the shared config. */
+    /** Litres per model-minute this node pushes out of its outlet. Default = the shared config. */
     protected double outletFlowLitersPerMin() {
         return Config.REACTOR_OUTLET_FLOW_L_PER_MIN.get();
+    }
+
+    /**
+     * Convert a volumetric flow in litres per MODEL-minute to millibuckets per tick, on the same model clock as
+     * the kinetics (so residence time τ = V/Q is comparable to the reaction timescale 1/k). Dimensionally:
+     * {@code L/model-min × (model-min per tick) × mB/L}, where model-min per tick = {@code daysPerTick × 1440}.
+     */
+    protected static double litersPerMinToMbPerTick(double litersPerMin) {
+        double modelMinutesPerTick = MODEL_SECONDS_PER_TICK * Config.SIMULATION_SPEED.get() / 60.0;
+        return litersPerMin * modelMinutesPerTick * MB_PER_LITER;
     }
 
     /** The cell hosting this reactor's outlet port. Batch layout: bottom-centre of the right side face. */

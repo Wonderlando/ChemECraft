@@ -11,8 +11,8 @@ import java.util.Map;
  * A tunable caricature (not strictly mass-balanced) — adjust the coefficients or {@code k} freely.
  */
 public class Fermentation extends Reaction {
-    /** Tuned so a ~150 g/L batch finishes in ~1 in-game day, L/(mol·s). */
-    public static final double DEFAULT_RATE_CONSTANT = 2.0 / 86400.0;
+    /** L/(mol·s). Tuned so a ~150 g/L batch finishes in ~20 real minutes at simulationSpeed=1. */
+    public static final double DEFAULT_RATE_CONSTANT = 0.05;
     /** Exothermic heat of reaction per mole of extent (one substrate consumed), in joules. */
     public static final double DEFAULT_ENTHALPY = -100_000.0;
     /** Activation energy, J/mol — ~Q10 of 1.9 (rate nearly doubles per +10 K), typical of yeast kinetics. */

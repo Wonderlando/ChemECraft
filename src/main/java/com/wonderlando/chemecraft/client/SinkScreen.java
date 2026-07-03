@@ -57,16 +57,16 @@ public class SinkScreen extends AbstractContainerScreen<SinkMenu> {
         int x = leftPos + 10;
         graphics.text(f, this.title, x, topPos + 8, TITLE, true);
 
-        graphics.text(f, String.format("Inflow: %.2f L/day", menu.value(SinkBlockEntity.SLOT_RATE) / 100.0),
+        graphics.text(f, String.format("Inflow: %.2f L/s", menu.value(SinkBlockEntity.SLOT_RATE) / 100.0),
                 x, topPos + ROW0_Y, HEADER, true);
-        graphics.text(f, String.format("  Water: %.2f L/day", menu.value(SinkBlockEntity.SLOT_WATER) / 100.0),
+        graphics.text(f, String.format("  Water: %.2f L/s", menu.value(SinkBlockEntity.SLOT_WATER) / 100.0),
                 x, topPos + ROW0_Y + ROW_H, WATER_COLOR, true);
         int row = 2;
         for (Species s : Species.values()) {
             if (s.gas()) {
                 continue; // gases vent before reaching the sink
             }
-            graphics.text(f, String.format("  %s: %.2f mol/day", s.displayName(),
+            graphics.text(f, String.format("  %s: %.2f mol/s", s.displayName(),
                             menu.value(SinkBlockEntity.SPECIES_BASE + s.ordinal()) / 100.0),
                     x, topPos + ROW0_Y + ROW_H * row, TEXT, true);
             row++;

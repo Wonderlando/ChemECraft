@@ -11,7 +11,8 @@ import java.util.Map;
  * Enthalpy and activation energy are both zero (temperature-independent, no heat release).
  */
 public class SimpleAtoB extends Reaction {
-    public static final double DEFAULT_RATE_CONSTANT = 1.0; // s⁻¹ (first-order)
+    // s⁻¹ (first-order, real time): with a 1 s residence time (Da = kf·τ = 1) a CSTR gives 50% conversion.
+    public static final double DEFAULT_RATE_CONSTANT = 1.0;
 
     public SimpleAtoB() {
         this(DEFAULT_RATE_CONSTANT);

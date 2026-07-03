@@ -1,6 +1,5 @@
 package com.wonderlando.chemecraft.block.entity;
 
-import com.wonderlando.chemecraft.Config;
 import com.wonderlando.chemecraft.block.FluidTransport;
 import com.wonderlando.chemecraft.menu.ReservoirMenu;
 import com.wonderlando.chemecraft.reaction.Species;
@@ -66,8 +65,8 @@ public class ReservoirBlockEntity extends ReactorBlockEntity {
         if (!isReleasing() || destination == null) {
             return;
         }
-        // Solvent flow this tick (L/min → mB/tick), carrying a fractional remainder so the rate stays exact.
-        releaseCarryMb += (flowLitersPerMin / 1440.0) * Config.REACTION_MODEL_DAYS_PER_TICK.get() * MB_PER_LITER;
+        // Solvent flow this tick (L/model-min → mB/tick), carrying a fractional remainder so the rate stays exact.
+        releaseCarryMb += litersPerMinToMbPerTick(flowLitersPerMin);
         int waterMb = (int) Math.floor(releaseCarryMb);
         releaseCarryMb -= waterMb;
         if (waterMb <= 0) {
